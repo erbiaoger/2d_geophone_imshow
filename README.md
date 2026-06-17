@@ -60,7 +60,7 @@ uv run --no-sync python scripts/plot_geophone_coordinates.py \
 
 - `outputs/changbaishan_second/geophone_array_coordinates.csv`
 - `outputs/changbaishan_second/geophone_array.png`
-- `outputs/changbaishan_second/geophone_basemap.png`
+- `outputs/changbaishan_second/geophone_basemap.png`: 默认卫星底图，点颜色代表海拔高度。
 - `outputs/changbaishan_second/geophone_map.html`
 
 如果想换底图风格，可以加 `--basemap-provider`:
@@ -72,4 +72,4 @@ uv run --no-sync python scripts/plot_geophone_coordinates.py \
   --basemap-provider Esri.WorldImagery
 ```
 
-可选值包括 `Esri.WorldTopoMap`, `Esri.WorldImagery`, `Esri.WorldPhysical`, `OpenTopoMap`。
+可选值包括 `Esri.WorldImagery`, `Esri.WorldTopoMap`, `Esri.WorldPhysical`, `OpenTopoMap`。

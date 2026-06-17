@@ -26,6 +26,7 @@ def points_to_dataframe(points: list[GeophonePoint]) -> pd.DataFrame:
                 "y": point.y,
                 "latitude": point.latitude,
                 "longitude": point.longitude,
+                "elevation_m": point.elevation_m,
                 "coordinate_source": point.coordinate_source,
             }
             for point in points
@@ -57,11 +58,12 @@ def save_static_plot(points: list[GeophonePoint], output_path: Path, *, title: s
     else:
         xlabel = "Column index / Longitude"
         ylabel = "Line index / Latitude"
-    colorbar_label = "Station ID" if station_plot else "Line index"
+    has_elevation = df["elevation_m"].notna().any()
+    colorbar_label = "Elevation (m)" if has_elevation else ("Station ID" if station_plot else "Line index")
 
-    color_values = df["row"].fillna(0)
+    color_values = df["elevation_m"] if has_elevation else df["row"].fillna(0)
     annotate_station_labels = False
-    if station_plot and color_values.max() > 100_000:
+    if not has_elevation and station_plot and color_values.max() > 100_000:
         color_values = pd.Series(range(1, len(df) + 1), index=df.index)
         colorbar_label = "Station order"
         annotate_station_labels = True
@@ -71,7 +73,7 @@ def save_static_plot(points: list[GeophonePoint], output_path: Path, *, title: s
         df["y"],
         c=color_values,
         s=12,
-        cmap="viridis",
+        cmap="terrain" if has_elevation else "viridis",
         alpha=0.85,
         edgecolors="none",
         rasterized=True,
@@ -148,7 +150,7 @@ def save_basemap_plot(
     output_path: Path,
     *,
     title: str,
-    provider_name: str = "Esri.WorldTopoMap",
+    provider_name: str = "Esri.WorldImagery",
 ) -> int:
     lonlat_points = [
         point
@@ -171,6 +173,7 @@ def save_basemap_plot(
                 "station_id": point.row,
                 "label": str(int(point.row))[-4:] if point.row is not None else str(index),
                 "order": index,
+                "elevation_m": point.elevation_m,
             }
         )
     df = pd.DataFrame(rows)
@@ -199,12 +202,15 @@ def save_basemap_plot(
             alpha=0.75,
             zorder=7,
         )
+    has_elevation = df["elevation_m"].notna().any()
+    color_values = df["elevation_m"] if has_elevation else df["order"]
+    colorbar_label = "Elevation (m)" if has_elevation else "Station order"
     scatter = ax.scatter(
         df["x"],
         df["y"],
-        c=df["order"],
+        c=color_values,
         s=34,
-        cmap="autumn",
+        cmap="terrain" if has_elevation else "autumn",
         edgecolors="black",
         linewidths=0.55,
         zorder=5,
@@ -225,8 +231,8 @@ def save_basemap_plot(
     ax.set_ylabel("Latitude")
     ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{_web_mercator_to_lonlat(value, 0.0)[0]:.4f}°"))
     ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{_web_mercator_to_lonlat(0.0, value)[1]:.4f}°"))
-    ax.grid(True, color="white", alpha=0.45, linewidth=0.5)
-    fig.colorbar(scatter, ax=ax, shrink=0.72, label="Station order")
+    ax.grid(True, color="white", alpha=0.5, linewidth=0.5)
+    fig.colorbar(scatter, ax=ax, shrink=0.72, label=colorbar_label)
     fig.savefig(output_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return len(lonlat_points)

@@ -91,10 +91,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--basemap-provider",
-        default="Esri.WorldTopoMap",
+        default="Esri.WorldImagery",
         help=(
-            "静态 PNG 底图瓦片源，默认 Esri.WorldTopoMap。"
-            "也可用 Esri.WorldPhysical、Esri.WorldImagery、OpenTopoMap。"
+            "静态 PNG 底图瓦片源，默认 Esri.WorldImagery 卫星影像。"
+            "也可用 Esri.WorldTopoMap、Esri.WorldPhysical、OpenTopoMap。"
         ),
     )
     parser.add_argument(

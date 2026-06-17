@@ -48,6 +48,7 @@ class GeophonePoint:
     y: float
     latitude: float | None
     longitude: float | None
+    elevation_m: float | None
     coordinate_source: str
 
     def with_lonlat(self, latitude: float, longitude: float, source: str) -> "GeophonePoint":
@@ -134,12 +135,14 @@ def collect_sac_points(root: Path, *, coordinate_mode: str = "auto") -> list[Geo
             source = "sac_lonlat"
             latitude = coords.latitude
             longitude = coords.longitude
+            elevation_m = coords.elevation_m
         elif coordinate_mode in {"auto", "array"} and position is not None:
             x = position.x
             y = position.y
             source = "array"
             latitude = None
             longitude = None
+            elevation_m = None
         else:
             continue
 
@@ -153,6 +156,7 @@ def collect_sac_points(root: Path, *, coordinate_mode: str = "auto") -> list[Geo
                 y=y,
                 latitude=latitude,
                 longitude=longitude,
+                elevation_m=elevation_m,
                 coordinate_source=source,
             )
         )
@@ -191,12 +195,14 @@ def collect_station_points(root: Path, *, coordinate_mode: str = "auto") -> list
             source = "sac_lonlat"
             latitude = coords.latitude
             longitude = coords.longitude
+            elevation_m = coords.elevation_m
         elif coordinate_mode in {"auto", "array"}:
             x = float(station_index)
             y = 0.0
             source = "station_index"
             latitude = None
             longitude = None
+            elevation_m = None
         else:
             continue
 
@@ -210,6 +216,7 @@ def collect_station_points(root: Path, *, coordinate_mode: str = "auto") -> list
                 y=y,
                 latitude=latitude,
                 longitude=longitude,
+                elevation_m=elevation_m,
                 coordinate_source=source,
             )
         )
@@ -250,18 +257,21 @@ def collect_filename_station_points(
             y = gps.latitude
             latitude = gps.latitude
             longitude = gps.longitude
+            elevation_m = gps.elevation_m
             source = "gps_db"
         elif coordinate_mode in {"auto", "sac"} and valid_lonlat(coords.latitude, coords.longitude):
             x = coords.longitude
             y = coords.latitude
             latitude = coords.latitude
             longitude = coords.longitude
+            elevation_m = coords.elevation_m
             source = "sac_lonlat"
         elif coordinate_mode in {"auto", "array"}:
             x = float(station_index)
             y = 0.0
             latitude = None
             longitude = None
+            elevation_m = None
             source = "station_index"
         else:
             continue
@@ -277,6 +287,7 @@ def collect_filename_station_points(
                 y=y,
                 latitude=latitude,
                 longitude=longitude,
+                elevation_m=elevation_m,
                 coordinate_source=source,
             )
         )

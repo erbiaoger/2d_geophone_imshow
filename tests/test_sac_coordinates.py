@@ -138,6 +138,7 @@ def test_collect_filename_station_points_uses_gps_coordinates(tmp_path: Path) ->
     assert points[0].coordinate_source == "gps_db"
     assert points[0].latitude == pytest.approx(42.1)
     assert points[0].longitude == pytest.approx(128.2)
+    assert points[0].elevation_m == pytest.approx(1100.0)
 
 
 def test_project_array_points_uses_origin_spacing_and_bearings(tmp_path: Path) -> None:
