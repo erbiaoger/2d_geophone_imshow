@@ -28,3 +28,35 @@ uv run --no-sync python scripts/plot_geophone_coordinates.py \
   --station-csv "/path/to/stations.csv" \
   --output-dir outputs/from_csv
 ```
+
+## extract_station_csv_from_sac.py
+
+作用:
+
+- 第一步脚本。
+- 扫描 SAC 目录并提取标准台站 CSV。
+- 可自动识别数字文件夹模式和平铺文件名前缀模式。
+- 可结合 `dccigugps.db` 补经纬度。
+
+运行:
+
+```bash
+uv run --no-sync python scripts/extract_station_csv_from_sac.py \
+  --data-root "/path/to/sac_root" \
+  --output-csv outputs/stations.csv
+```
+
+## plot_station_maps_from_csv.py
+
+作用:
+
+- 第二步脚本。
+- 读取标准台站 CSV，生成 PNG、静态底图 PNG、离线 HTML 和 live HTML。
+
+运行:
+
+```bash
+uv run --no-sync python scripts/plot_station_maps_from_csv.py \
+  --station-csv outputs/stations.csv \
+  --output-dir outputs/from_csv
+```

@@ -44,13 +44,8 @@ if str(SRC_DIR) not in sys.path:
 
 from geophone_map.georeference import project_array_points
 from geophone_map.plotting import save_basemap_plot, save_folium_map, save_points_csv, save_static_plot
-from geophone_map.sac_coordinates import collect_sac_points, collect_station_points
-from geophone_map.sac_coordinates import (
-    collect_filename_station_points,
-    find_default_gps_db,
-    load_points_from_csv,
-    load_igu_gps_coordinates,
-)
+from geophone_map.sac_coordinates import load_points_from_csv
+from geophone_map.workflows import collect_points_from_sac_source
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -170,22 +165,12 @@ def main() -> None:
         points = load_points_from_csv(args.station_csv)
         group_by = "csv"
     else:
-        group_by = resolve_group_by(args.data_root, args.group_by)
-        gps_coordinates = {}
-        gps_db = resolve_gps_db(args.data_root, args.gps_db)
-        if gps_db is not None:
-            gps_coordinates = load_igu_gps_coordinates(gps_db)
-
-        if group_by == "station-folder":
-            points = collect_station_points(args.data_root, coordinate_mode=args.coordinate_mode)
-        elif group_by == "filename-prefix":
-            points = collect_filename_station_points(
-                args.data_root,
-                coordinate_mode=args.coordinate_mode,
-                gps_coordinates=gps_coordinates,
-            )
-        else:
-            points = collect_sac_points(args.data_root, coordinate_mode=args.coordinate_mode)
+        points, gps_db, group_by = collect_points_from_sac_source(
+            args.data_root,
+            coordinate_mode=args.coordinate_mode,
+            group_by=args.group_by,
+            gps_db=args.gps_db,
+        )
     if not points:
         source = args.station_csv if args.station_csv is not None else args.data_root
         raise SystemExit(f"No usable station coordinates found under {source}")
@@ -251,25 +236,5 @@ def main() -> None:
         print("HTML map: skipped because no real/projected longitude-latitude coordinates are available")
     if gps_db is not None:
         print(f"GPS DB: {gps_db}")
-
-
-def resolve_group_by(data_root: Path, group_by: str) -> str:
-    if group_by != "auto":
-        return group_by
-    has_station_dirs = any(path.is_dir() and path.name.isdigit() for path in data_root.iterdir())
-    if has_station_dirs:
-        return "station-folder"
-    return "filename-prefix"
-
-
-def resolve_gps_db(data_root: Path, gps_db: str) -> Path | None:
-    if gps_db.lower() in {"none", "no", "false", "0"}:
-        return None
-    if gps_db != "auto":
-        path = Path(gps_db)
-        return path if path.exists() else None
-    return find_default_gps_db(data_root)
-
-
 if __name__ == "__main__":
     main()

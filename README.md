@@ -4,7 +4,10 @@
 
 这个项目用于从 SAC 地震波形数据中提取检波器/台站坐标，并输出坐标表、阵列图和可选地图叠加 HTML。默认按“一个数字文件夹=一台检波器”处理，所以这批数据会输出 60 个点。
 
-除了 SAC 目录，也支持直接读取台站索引 CSV 生成同样的图片和 HTML 地图。
+推荐流程现在是两步:
+
+1. 从 SAC 提取标准台站 CSV
+2. 从这个 CSV 生成图片和 HTML 地图
 
 ## 文件夹
 
@@ -32,6 +35,45 @@ uv run --no-sync python scripts/plot_geophone_coordinates.py \
 
 - `outputs/geophone_array_coordinates.csv`
 - `outputs/geophone_array.png`
+
+## 两步流程
+
+### 第一步: 从 SAC 提取标准台站 CSV
+
+```bash
+uv run --no-sync python scripts/extract_station_csv_from_sac.py \
+  --data-root "/Volumes/CSIM_LAB/DATA/长白山数据/长白山第二次采集数据(20240822~20250622)/SAC格式/z_component" \
+  --output-csv outputs/changbaishan_second/stations.csv
+```
+
+这一步会生成一个标准 CSV，包含:
+
+- `file_name`
+- `path`
+- `row`
+- `column`
+- `x`
+- `y`
+- `latitude`
+- `longitude`
+- `elevation_m`
+- `coordinate_source`
+
+### 第二步: 从标准台站 CSV 绘图
+
+```bash
+uv run --no-sync python scripts/plot_station_maps_from_csv.py \
+  --station-csv outputs/changbaishan_second/stations.csv \
+  --output-dir outputs/changbaishan_second
+```
+
+输出:
+
+- `outputs/changbaishan_second/geophone_array_coordinates.csv`
+- `outputs/changbaishan_second/geophone_array.png`
+- `outputs/changbaishan_second/geophone_basemap.png`
+- `outputs/changbaishan_second/geophone_map.html`
+- `outputs/changbaishan_second/geophone_map_live.html`
 
 ## 直接从台站索引 CSV 绘图
 
