@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 
 import branca.colormap as bcm
+from branca.element import Element
 import folium
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -211,8 +212,10 @@ def save_folium_map(
                 zindex=1,
                 name=f"{provider_name} (embedded)",
             ).add_to(fmap)
-    marker_group = folium.FeatureGroup(name="Geophones", show=True)
+    marker_group = folium.FeatureGroup(name="台站", show=True)
     marker_group.add_to(fmap)
+    label_group = folium.FeatureGroup(name="台站标签", show=True)
+    label_group.add_to(fmap)
 
     elevations = [point.elevation_m for point in lonlat_points if point.elevation_m is not None]
     if elevations:
@@ -262,7 +265,7 @@ def save_folium_map(
                     f"transform: translate(8px, -6px);\">{station_label}</div>"
                 )
             ),
-        ).add_to(marker_group)
+        ).add_to(label_group)
         bounds.append([point.latitude, point.longitude])
 
     if color_scale is not None:
@@ -271,6 +274,8 @@ def save_folium_map(
         west_lon, south_lat = _web_mercator_to_lonlat(xlim[0], ylim[0])
         east_lon, north_lat = _web_mercator_to_lonlat(xlim[1], ylim[1])
         fmap.fit_bounds([[south_lat, west_lon], [north_lat, east_lon]], padding=(20, 20))
+    if map_mode == "live":
+        _add_live_map_tools(fmap, label_group_name=label_group.get_name(), has_color_scale=color_scale is not None)
     folium.LayerControl(position="topright", collapsed=False).add_to(fmap)
     fmap.save(output_path)
     return len(lonlat_points)
@@ -587,3 +592,94 @@ def _provider_display_name(provider_name: str) -> str:
         "Esri.WorldPhysical": "地形",
     }
     return display_names.get(provider_name, provider_name)
+
+
+def _add_live_map_tools(fmap: folium.Map, *, label_group_name: str, has_color_scale: bool) -> None:
+    map_name = fmap.get_name()
+    legend_toggle_style = "" if has_color_scale else "display:none;"
+    html = f"""
+    <style>
+      .geophone-live-tools {{
+        position: absolute;
+        top: 10px;
+        right: 170px;
+        z-index: 1000;
+        display: flex;
+        gap: 6px;
+        font-family: "Times New Roman", serif;
+      }}
+      .geophone-live-tools button {{
+        border: 1px solid rgba(0, 0, 0, 0.25);
+        background: rgba(255, 255, 255, 0.95);
+        color: #111827;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1;
+        padding: 8px 10px;
+        border-radius: 4px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+      }}
+      .geophone-live-tools button.is-off {{
+        background: rgba(229, 231, 235, 0.95);
+        color: #6b7280;
+      }}
+    </style>
+    <div class="geophone-live-tools" id="{map_name}_live_tools">
+      <button type="button" id="{map_name}_toggle_labels">标签</button>
+      <button type="button" id="{map_name}_toggle_legend" style="{legend_toggle_style}">色标</button>
+    </div>
+    <script>
+      (function() {{
+        var map = {map_name};
+        var labelLayer = {label_group_name};
+        var labelsButton = document.getElementById("{map_name}_toggle_labels");
+        var legendButton = document.getElementById("{map_name}_toggle_legend");
+
+        function syncLabelButton() {{
+          labelsButton.classList.toggle("is-off", !map.hasLayer(labelLayer));
+        }}
+
+        labelsButton.addEventListener("click", function() {{
+          if (map.hasLayer(labelLayer)) {{
+            map.removeLayer(labelLayer);
+          }} else {{
+            map.addLayer(labelLayer);
+          }}
+          syncLabelButton();
+        }});
+
+        syncLabelButton();
+
+        if (legendButton) {{
+          function legendElements() {{
+            return document.querySelectorAll(".legend");
+          }}
+
+          function legendVisible() {{
+            var legends = legendElements();
+            if (!legends.length) {{
+              return false;
+            }}
+            return Array.from(legends).some(function(el) {{
+              return el.style.display !== "none";
+            }});
+          }}
+
+          function syncLegendButton() {{
+            legendButton.classList.toggle("is-off", !legendVisible());
+          }}
+
+          legendButton.addEventListener("click", function() {{
+            var shouldShow = !legendVisible();
+            legendElements().forEach(function(el) {{
+              el.style.display = shouldShow ? "" : "none";
+            }});
+            syncLegendButton();
+          }});
+
+          syncLegendButton();
+        }}
+      }})();
+    </script>
+    """
+    fmap.get_root().html.add_child(Element(html))
