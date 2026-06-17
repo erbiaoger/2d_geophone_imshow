@@ -180,8 +180,15 @@ def save_folium_map(
 
     fmap = folium.Map(location=[center_lat, center_lon], zoom_start=10, tiles=None, control_scale=True)
     if map_mode == "live":
-        live_layer = folium.TileLayer(**_folium_tile_layer_kwargs(provider_name))
-        live_layer.add_to(fmap)
+        for index, live_provider in enumerate(_live_provider_sequence(provider_name)):
+            live_layer = folium.TileLayer(
+                **_folium_tile_layer_kwargs(
+                    live_provider,
+                    layer_name=_provider_display_name(live_provider),
+                    show=index == 0,
+                )
+            )
+            live_layer.add_to(fmap)
     else:
         basemap = _fetch_xyz_basemap(
             xlim,
@@ -264,7 +271,7 @@ def save_folium_map(
         west_lon, south_lat = _web_mercator_to_lonlat(xlim[0], ylim[0])
         east_lon, north_lat = _web_mercator_to_lonlat(xlim[1], ylim[1])
         fmap.fit_bounds([[south_lat, west_lon], [north_lat, east_lon]], padding=(20, 20))
-    folium.LayerControl().add_to(fmap)
+    folium.LayerControl(position="topright", collapsed=False).add_to(fmap)
     fmap.save(output_path)
     return len(lonlat_points)
 
@@ -539,15 +546,44 @@ def _xyz_provider(provider_name: str) -> dict[str, str | int]:
     return providers.get(provider_name, providers["Esri.WorldTopoMap"])
 
 
-def _folium_tile_layer_kwargs(provider_name: str) -> dict[str, str | int | bool]:
+def _folium_tile_layer_kwargs(
+    provider_name: str,
+    *,
+    layer_name: str | None = None,
+    show: bool = True,
+) -> dict[str, str | int | bool]:
     provider = _xyz_provider(provider_name)
     zoom = int(provider["zoom"])
     return {
         "tiles": str(provider["url"]),
         "attr": str(provider["attribution"]),
-        "name": f"{provider_name} (live)",
+        "name": layer_name if layer_name is not None else f"{provider_name} (live)",
         "overlay": False,
         "control": True,
+        "show": show,
         "max_zoom": max(zoom, 19),
         "max_native_zoom": max(zoom, 19),
     }
+
+
+def _live_provider_sequence(provider_name: str) -> list[str]:
+    terrain_provider = "OpenTopoMap"
+    if provider_name in {"OpenTopoMap", "Esri.WorldTopoMap", "Esri.WorldPhysical"}:
+        sequence = [terrain_provider, "Esri.WorldImagery"]
+    else:
+        sequence = ["Esri.WorldImagery", terrain_provider]
+    unique_sequence: list[str] = []
+    for item in sequence:
+        if item not in unique_sequence:
+            unique_sequence.append(item)
+    return unique_sequence
+
+
+def _provider_display_name(provider_name: str) -> str:
+    display_names = {
+        "Esri.WorldImagery": "卫星",
+        "OpenTopoMap": "地形",
+        "Esri.WorldTopoMap": "地形",
+        "Esri.WorldPhysical": "地形",
+    }
+    return display_names.get(provider_name, provider_name)
