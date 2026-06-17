@@ -183,7 +183,11 @@ def main() -> None:
         title=title,
         provider_name=args.basemap_provider,
     )
-    mapped_count = save_folium_map(points, html_path)
+    mapped_count = save_folium_map(
+        points,
+        html_path,
+        provider_name=args.basemap_provider,
+    )
 
     print(f"Collected points: {len(points)}")
     print(f"CSV: {csv_path}")

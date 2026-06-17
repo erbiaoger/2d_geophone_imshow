@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+from io import BytesIO
 import math
 from pathlib import Path
 
@@ -148,7 +150,12 @@ def save_static_plot(points: list[GeophonePoint], output_path: Path, *, title: s
     plt.close(fig)
 
 
-def save_folium_map(points: list[GeophonePoint], output_path: Path) -> int:
+def save_folium_map(
+    points: list[GeophonePoint],
+    output_path: Path,
+    *,
+    provider_name: str = "Esri.WorldImagery",
+) -> int:
     lonlat_points = [
         point
         for point in points
@@ -160,22 +167,38 @@ def save_folium_map(points: list[GeophonePoint], output_path: Path) -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     center_lat = sum(point.latitude for point in lonlat_points if point.latitude is not None) / len(lonlat_points)
     center_lon = sum(point.longitude for point in lonlat_points if point.longitude is not None) / len(lonlat_points)
+    mercator_points = [
+        _lonlat_to_web_mercator(point.longitude, point.latitude)
+        for point in lonlat_points
+    ]
+    x_values = [item[0] for item in mercator_points]
+    y_values = [item[1] for item in mercator_points]
+    x_margin = max((max(x_values) - min(x_values)) * 0.18, 120.0)
+    y_margin = max((max(y_values) - min(y_values)) * 0.18, 120.0)
+    xlim = (min(x_values) - x_margin, max(x_values) + x_margin)
+    ylim = (min(y_values) - y_margin, max(y_values) + y_margin)
 
     fmap = folium.Map(location=[center_lat, center_lon], zoom_start=10, tiles=None, control_scale=True)
-    folium.TileLayer(
-        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        attr="Tiles (C) Esri",
-        name="Esri World Imagery",
-        overlay=False,
-        control=True,
-    ).add_to(fmap)
-    folium.TileLayer(
-        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-        attr="Tiles (C) Esri",
-        name="Esri World Topo",
-        overlay=False,
-        control=True,
-    ).add_to(fmap)
+    basemap = _fetch_xyz_basemap(
+        xlim,
+        ylim,
+        provider_name=provider_name,
+        cache_dir=output_path.parent / ".tile_cache",
+    )
+    if basemap is not None:
+        image, extent, _ = basemap
+        west, east, south, north = extent
+        west_lon, south_lat = _web_mercator_to_lonlat(west, south)
+        east_lon, north_lat = _web_mercator_to_lonlat(east, north)
+        folium.raster_layers.ImageOverlay(
+            image=_pil_image_to_data_url(image),
+            bounds=[[south_lat, west_lon], [north_lat, east_lon]],
+            opacity=1.0,
+            interactive=False,
+            cross_origin=False,
+            zindex=1,
+            name=f"{provider_name} (embedded)",
+        ).add_to(fmap)
     marker_group = folium.FeatureGroup(name="Geophones", show=True)
     marker_group.add_to(fmap)
 
@@ -453,6 +476,13 @@ def _load_tile(provider: dict[str, str | int], tile_x: int, tile_y: int, zoom: i
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_bytes(response.content)
     return Image.open(cache_path).convert("RGB")
+
+
+def _pil_image_to_data_url(image: Image.Image) -> str:
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
 
 
 def _xyz_provider(provider_name: str) -> dict[str, str | int]:
