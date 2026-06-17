@@ -2,7 +2,7 @@
 """Plot 2D geophone coordinates from SAC files.
 
 用途:
-    扫描一个包含 SAC 文件的目录。默认自动识别两种结构:
+    扫描一个包含 SAC 文件的目录，或直接读取台站索引 CSV。SAC 模式默认自动识别两种结构:
     1. 一个数字文件夹=一台检波器/台站，每个文件夹只取一个代表 SAC 文件，例如:
         数据/12/S12_Z_1.sac -> station=12
     2. 平铺 SAC 文件，台站编号在文件名前缀，例如:
@@ -48,6 +48,7 @@ from geophone_map.sac_coordinates import collect_sac_points, collect_station_poi
 from geophone_map.sac_coordinates import (
     collect_filename_station_points,
     find_default_gps_db,
+    load_points_from_csv,
     load_igu_gps_coordinates,
 )
 
@@ -61,6 +62,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("/Volumes/CSIM_LAB/DATA/chaoyang/数据"),
         help="SAC 数据根目录，默认是 /Volumes/CSIM_LAB/DATA/chaoyang/数据。",
+    )
+    parser.add_argument(
+        "--station-csv",
+        type=Path,
+        help="台站索引 CSV 路径。提供后将直接从 CSV 读取点位，不再扫描 SAC 目录。",
     )
     parser.add_argument(
         "--output-dir",
@@ -159,24 +165,30 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    group_by = resolve_group_by(args.data_root, args.group_by)
-    gps_coordinates = {}
-    gps_db = resolve_gps_db(args.data_root, args.gps_db)
-    if gps_db is not None:
-        gps_coordinates = load_igu_gps_coordinates(gps_db)
-
-    if group_by == "station-folder":
-        points = collect_station_points(args.data_root, coordinate_mode=args.coordinate_mode)
-    elif group_by == "filename-prefix":
-        points = collect_filename_station_points(
-            args.data_root,
-            coordinate_mode=args.coordinate_mode,
-            gps_coordinates=gps_coordinates,
-        )
+    gps_db = None
+    if args.station_csv is not None:
+        points = load_points_from_csv(args.station_csv)
+        group_by = "csv"
     else:
-        points = collect_sac_points(args.data_root, coordinate_mode=args.coordinate_mode)
+        group_by = resolve_group_by(args.data_root, args.group_by)
+        gps_coordinates = {}
+        gps_db = resolve_gps_db(args.data_root, args.gps_db)
+        if gps_db is not None:
+            gps_coordinates = load_igu_gps_coordinates(gps_db)
+
+        if group_by == "station-folder":
+            points = collect_station_points(args.data_root, coordinate_mode=args.coordinate_mode)
+        elif group_by == "filename-prefix":
+            points = collect_filename_station_points(
+                args.data_root,
+                coordinate_mode=args.coordinate_mode,
+                gps_coordinates=gps_coordinates,
+            )
+        else:
+            points = collect_sac_points(args.data_root, coordinate_mode=args.coordinate_mode)
     if not points:
-        raise SystemExit(f"No usable SAC coordinates found under {args.data_root}")
+        source = args.station_csv if args.station_csv is not None else args.data_root
+        raise SystemExit(f"No usable station coordinates found under {source}")
 
     if args.origin_lat is not None or args.origin_lon is not None:
         if args.origin_lat is None or args.origin_lon is None:

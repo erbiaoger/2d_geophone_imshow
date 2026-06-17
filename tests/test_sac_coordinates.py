@@ -14,6 +14,7 @@ from geophone_map.sac_coordinates import (
     collect_sac_points,
     collect_filename_station_points,
     collect_station_points,
+    load_points_from_csv,
     load_igu_gps_coordinates,
     parse_array_position,
     read_sac_coordinates,
@@ -139,6 +140,43 @@ def test_collect_filename_station_points_uses_gps_coordinates(tmp_path: Path) ->
     assert points[0].latitude == pytest.approx(42.1)
     assert points[0].longitude == pytest.approx(128.2)
     assert points[0].elevation_m == pytest.approx(1100.0)
+
+
+def test_load_points_from_csv_prefers_lonlat_and_elevation(tmp_path: Path) -> None:
+    csv_path = tmp_path / "stations.csv"
+    csv_path.write_text(
+        "station,lat,lon,elevation,path\n"
+        "101,42.1,128.2,1100,/tmp/A.sac\n",
+        encoding="utf-8",
+    )
+
+    points = load_points_from_csv(csv_path)
+
+    assert len(points) == 1
+    assert points[0].row == 101
+    assert points[0].longitude == pytest.approx(128.2)
+    assert points[0].latitude == pytest.approx(42.1)
+    assert points[0].elevation_m == pytest.approx(1100.0)
+    assert points[0].coordinate_source == "csv_lonlat"
+    assert points[0].file_name == "A.sac"
+
+
+def test_load_points_from_csv_accepts_xy_aliases(tmp_path: Path) -> None:
+    csv_path = tmp_path / "stations_xy.csv"
+    csv_path.write_text(
+        "station_id,X,Y,file_name\n"
+        "202,12.5,9.5,station202\n",
+        encoding="utf-8",
+    )
+
+    points = load_points_from_csv(csv_path)
+
+    assert len(points) == 1
+    assert points[0].row == 202
+    assert points[0].x == pytest.approx(12.5)
+    assert points[0].y == pytest.approx(9.5)
+    assert points[0].coordinate_source == "csv_xy"
+    assert points[0].file_name == "station202"
 
 
 def test_project_array_points_uses_origin_spacing_and_bearings(tmp_path: Path) -> None:

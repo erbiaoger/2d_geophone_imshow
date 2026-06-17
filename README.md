@@ -4,6 +4,8 @@
 
 这个项目用于从 SAC 地震波形数据中提取检波器/台站坐标，并输出坐标表、阵列图和可选地图叠加 HTML。默认按“一个数字文件夹=一台检波器”处理，所以这批数据会输出 60 个点。
 
+除了 SAC 目录，也支持直接读取台站索引 CSV 生成同样的图片和 HTML 地图。
+
 ## 文件夹
 
 - `src/geophone_map/`: 核心 Python 模块，负责 SAC 头段读取、台站/阵列索引解析、坐标投影和绘图。
@@ -30,6 +32,26 @@ uv run --no-sync python scripts/plot_geophone_coordinates.py \
 
 - `outputs/geophone_array_coordinates.csv`
 - `outputs/geophone_array.png`
+
+## 直接从台站索引 CSV 绘图
+
+如果你已经有台站索引 CSV，可直接运行:
+
+```bash
+uv run --no-sync python scripts/plot_geophone_coordinates.py \
+  --station-csv "/path/to/stations.csv" \
+  --output-dir outputs/from_csv
+```
+
+常见可识别列名包括:
+
+- 台站编号: `station`, `station_id`, `row`, `index`, `id`
+- 阵列坐标: `x`, `y`, `column`, `row`
+- 经纬度: `lat`, `latitude`, `lon`, `longitude`
+- 海拔: `elevation`, `elev`, `elevation_m`
+- 文件信息: `path`, `file_name`, `name`
+
+如果 CSV 里有 `lat/lon`，会直接生成地图底图和 HTML；如果只有 `x/y` 或 `row/column`，则先画平面分布图，也可以再配合 `--origin-lat/--origin-lon` 做投影。
 
 ## 叠加地图
 

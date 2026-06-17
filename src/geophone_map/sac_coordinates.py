@@ -7,6 +7,8 @@ import struct
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+import pandas as pd
+
 SAC_NULL = -12345.0
 SAC_HEADER_BYTES = 632
 _SAC_FLOAT_COUNT = 70
@@ -295,9 +297,119 @@ def collect_filename_station_points(
     return points
 
 
+def load_points_from_csv(csv_path: Path) -> list[GeophonePoint]:
+    """Load station points from a CSV file with flexible column aliases."""
+    csv_path = Path(csv_path)
+    frame = pd.read_csv(csv_path)
+    if frame.empty:
+        return []
+
+    normalized_columns = {_normalize_column_name(column): column for column in frame.columns}
+    row_col = _find_csv_column(normalized_columns, "row", "station", "stationid", "stationindex", "index", "id")
+    column_col = _find_csv_column(normalized_columns, "column", "col")
+    x_col = _find_csv_column(normalized_columns, "x")
+    y_col = _find_csv_column(normalized_columns, "y")
+    lat_col = _find_csv_column(normalized_columns, "latitude", "lat", "stla")
+    lon_col = _find_csv_column(normalized_columns, "longitude", "lon", "lng", "stlo")
+    elev_col = _find_csv_column(normalized_columns, "elevationm", "elevation", "elev", "altitude", "alt")
+    path_col = _find_csv_column(normalized_columns, "path", "filepath", "file")
+    file_name_col = _find_csv_column(normalized_columns, "filename", "file_name", "name")
+
+    if not any([x_col, y_col, lat_col, lon_col, row_col, column_col]):
+        raise ValueError(
+            "CSV must contain at least one of x/y, latitude/longitude, or row/column-like columns."
+        )
+
+    points: list[GeophonePoint] = []
+    for index, row in frame.iterrows():
+        row_value = _csv_int_or_none(row[row_col]) if row_col else None
+        column_value = _csv_int_or_none(row[column_col]) if column_col else None
+        latitude = _csv_float_or_none(row[lat_col]) if lat_col else None
+        longitude = _csv_float_or_none(row[lon_col]) if lon_col else None
+        elevation_m = _csv_float_or_none(row[elev_col]) if elev_col else None
+        x_value = _csv_float_or_none(row[x_col]) if x_col else None
+        y_value = _csv_float_or_none(row[y_col]) if y_col else None
+
+        if valid_lonlat(latitude, longitude):
+            x = longitude
+            y = latitude
+            source = "csv_lonlat"
+        elif x_value is not None and y_value is not None and math.isfinite(x_value) and math.isfinite(y_value):
+            x = x_value
+            y = y_value
+            source = "csv_xy"
+        elif column_value is not None and row_value is not None:
+            x = float(column_value)
+            y = float(row_value)
+            source = "csv_rowcol"
+        elif row_value is not None:
+            x = float(index + 1)
+            y = float(row_value)
+            source = "csv_row"
+        else:
+            continue
+
+        raw_path = str(row[path_col]).strip() if path_col and pd.notna(row[path_col]) else ""
+        point_path = Path(raw_path) if raw_path else csv_path
+        if file_name_col and pd.notna(row[file_name_col]):
+            file_name = str(row[file_name_col]).strip()
+        elif raw_path:
+            file_name = Path(raw_path).name
+        elif row_value is not None:
+            file_name = f"station_{row_value}"
+        else:
+            file_name = f"row_{index + 1}"
+
+        points.append(
+            GeophonePoint(
+                path=point_path,
+                file_name=file_name,
+                row=row_value,
+                column=column_value,
+                x=x,
+                y=y,
+                latitude=latitude if valid_lonlat(latitude, longitude) else None,
+                longitude=longitude if valid_lonlat(latitude, longitude) else None,
+                elevation_m=elevation_m,
+                coordinate_source=source,
+            )
+        )
+
+    return points
+
+
 def parse_filename_station_id(path: Path) -> str | None:
     match = _FILENAME_STATION_RE.match(Path(path).name)
     return match.group("station") if match else None
+
+
+def _normalize_column_name(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", name.strip().lower())
+
+
+def _find_csv_column(normalized_columns: dict[str, str], *aliases: str) -> str | None:
+    for alias in aliases:
+        column = normalized_columns.get(_normalize_column_name(alias))
+        if column is not None:
+            return column
+    return None
+
+
+def _csv_float_or_none(value) -> float | None:
+    if pd.isna(value):
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _csv_int_or_none(value) -> int | None:
+    float_value = _csv_float_or_none(value)
+    if float_value is None:
+        return None
+    return int(float_value)
 
 
 def load_igu_gps_coordinates(db_path: Path) -> dict[str, GPSCoordinate]:
