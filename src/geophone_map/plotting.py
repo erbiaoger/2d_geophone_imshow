@@ -8,10 +8,47 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import requests
 from PIL import Image
+from matplotlib.ticker import AutoMinorLocator
 from matplotlib.ticker import ScalarFormatter
 from matplotlib.ticker import FuncFormatter
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from geophone_map.sac_coordinates import GeophonePoint, valid_lonlat
+
+
+def setAxis(
+    ax,
+    dx=5,
+    dt=4,
+    axis_facecolor="auto",
+    tick_labelsize=None,
+    tick_fontweight=None,
+    axis_labelsize=None,
+    axis_labelweight=None,
+):
+    """Standard axis styling with optional font controls."""
+    _apply_plot_background(ax, axis_facecolor=axis_facecolor)
+    ax.xaxis.set_minor_locator(AutoMinorLocator(dx))
+    ax.tick_params(axis="x", which="major", length=5, width=2.5, direction="in", top=True, bottom=True)
+    ax.tick_params(axis="x", which="minor", length=3, width=2, direction="in", top=True, bottom=True)
+    ax.tick_params(axis="x", which="minor", labelbottom=False)
+    ax.yaxis.set_minor_locator(AutoMinorLocator(dt))
+    ax.tick_params(axis="y", which="major", length=5, width=2.5, direction="in", left=True, right=True)
+    ax.tick_params(axis="y", which="minor", length=3, width=2, direction="in", left=True, right=True)
+    ax.tick_params(axis="y", which="minor", labelleft=False)
+    if tick_labelsize is not None:
+        ax.tick_params(axis="both", which="major", labelsize=tick_labelsize)
+    if tick_fontweight is not None:
+        for tick in ax.get_xticklabels() + ax.get_yticklabels():
+            tick.set_fontweight(tick_fontweight)
+    if axis_labelsize is not None:
+        ax.xaxis.label.set_size(axis_labelsize)
+        ax.yaxis.label.set_size(axis_labelsize)
+    if axis_labelweight is not None:
+        ax.xaxis.label.set_weight(axis_labelweight)
+        ax.yaxis.label.set_weight(axis_labelweight)
+    for spine in ax.spines.values():
+        spine.set_linewidth(2)
 
 
 def points_to_dataframe(points: list[GeophonePoint]) -> pd.DataFrame:
@@ -100,11 +137,12 @@ def save_static_plot(points: list[GeophonePoint], output_path: Path, *, title: s
                 (row["x"], row["y"]),
                 xytext=(3, 3),
                 textcoords="offset points",
-            fontsize=8,
-            color="white" if has_elevation else "black",
-            alpha=0.95,
+                fontsize=8,
+                color="white" if has_elevation else "black",
+                alpha=0.95,
             )
-    fig.colorbar(scatter, ax=ax, label=colorbar_label)
+    setAxis(ax, tick_labelsize=11, axis_labelsize=12)
+    _add_aligned_colorbar(fig, ax, scatter, colorbar_label)
     fig.savefig(output_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
@@ -235,10 +273,30 @@ def save_basemap_plot(
     ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{_web_mercator_to_lonlat(value, 0.0)[0]:.4f}°"))
     ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{_web_mercator_to_lonlat(0.0, value)[1]:.4f}°"))
     ax.grid(True, color="white", alpha=0.5, linewidth=0.5)
-    fig.colorbar(scatter, ax=ax, shrink=0.72, label=colorbar_label)
+    setAxis(ax, axis_facecolor="none", tick_labelsize=11, axis_labelsize=12)
+    _add_aligned_colorbar(fig, ax, scatter, colorbar_label)
     fig.savefig(output_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return len(lonlat_points)
+
+
+def _apply_plot_background(ax, *, axis_facecolor: str) -> None:
+    if axis_facecolor == "auto":
+        return
+    if axis_facecolor in {"none", "transparent"}:
+        ax.set_facecolor("none")
+        return
+    ax.set_facecolor(axis_facecolor)
+
+
+def _add_aligned_colorbar(fig, ax, mappable, label: str):
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="4%", pad=0.12)
+    colorbar = fig.colorbar(mappable, cax=cax)
+    colorbar.set_label(label)
+    colorbar.ax.tick_params(length=5, width=1.5, direction="in", labelsize=11)
+    colorbar.outline.set_linewidth(1.5)
+    return colorbar
 
 
 def _expand_degenerate_axis(ax, lower: float, upper: float, *, axis: str) -> None:
