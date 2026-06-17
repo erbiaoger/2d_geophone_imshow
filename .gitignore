@@ -1,0 +1,10 @@
+.venv/
+.claude_resources.json
+.DS_Store
+__pycache__/
+.pytest_cache/
+*.egg-info/
+*.pyc
+outputs/*.png
+outputs/*.html
+outputs/*.csv

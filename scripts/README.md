@@ -1,0 +1,20 @@
+# scripts
+
+本文件夹保存可直接运行的命令行脚本。
+
+## plot_geophone_coordinates.py
+
+作用:
+
+- 扫描 SAC 数据目录。
+- 默认每个数字文件夹只取一个代表 SAC 文件，因此这批数据输出 60 个台站点。
+- 可读取代表 SAC 头段的 `stla/stlo`。
+- 如果经纬度为空，则使用文件夹编号作为台站索引坐标。
+- 输出坐标 CSV、阵列 PNG；在有真实或投影经纬度时输出 HTML 地图。
+
+运行:
+
+```bash
+uv run --no-sync python scripts/plot_geophone_coordinates.py \
+  --data-root "/Volumes/CSIM_LAB/DATA/chaoyang/数据"
+```

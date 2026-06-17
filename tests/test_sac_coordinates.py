@@ -1,0 +1,130 @@
+from __future__ import annotations
+
+import struct
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from geophone_map.sac_coordinates import (
+    SAC_NULL,
+    collect_sac_points,
+    collect_station_points,
+    parse_array_position,
+    read_sac_coordinates,
+    valid_lonlat,
+)
+from geophone_map.georeference import project_array_points
+
+
+def write_sac(path: Path, *, stla: float = SAC_NULL, stlo: float = SAC_NULL) -> None:
+    floats = [SAC_NULL] * 70
+    floats[0] = 0.002
+    floats[5] = 0.0
+    floats[31] = stla
+    floats[32] = stlo
+    ints = [-12345] * 40
+    strings = [b"-12345  "] * 24
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
+        struct.pack("<70f", *floats)
+        + struct.pack("<40i", *ints)
+        + b"".join(strings)
+        + struct.pack("<10f", *([0.0] * 10))
+    )
+
+
+def test_read_sac_coordinates_reads_little_endian_stla_stlo(tmp_path: Path) -> None:
+    sac_path = tmp_path / "1" / "S1_Z_1.sac"
+    write_sac(sac_path, stla=40.123, stlo=116.456)
+
+    coords = read_sac_coordinates(sac_path)
+
+    assert round(coords.latitude, 3) == 40.123
+    assert round(coords.longitude, 3) == 116.456
+
+
+def test_valid_lonlat_rejects_sac_null_and_zero_zero() -> None:
+    assert not valid_lonlat(SAC_NULL, SAC_NULL)
+    assert not valid_lonlat(0.0, 0.0)
+    assert valid_lonlat(40.0, 116.0)
+
+
+def test_parse_array_position_uses_parent_and_filename_indices(tmp_path: Path) -> None:
+    sac_path = tmp_path / "12" / "S12_Z_34.sac"
+    sac_path.parent.mkdir()
+    sac_path.touch()
+
+    position = parse_array_position(sac_path)
+
+    assert position is not None
+    assert position.row == 12
+    assert position.column == 34
+    assert position.x == 34
+    assert position.y == 12
+
+
+def test_collect_sac_points_falls_back_to_array_coordinates(tmp_path: Path) -> None:
+    write_sac(tmp_path / "1" / "S1_Z_1.sac")
+    write_sac(tmp_path / "1" / "S1_Z_2.sac")
+    write_sac(tmp_path / "2" / "S2_Z_1.sac", stla=40.1, stlo=116.2)
+
+    points = collect_sac_points(tmp_path)
+
+    assert len(points) == 3
+    by_name = {point.file_name: point for point in points}
+    assert by_name["S1_Z_1.sac"].coordinate_source == "array"
+    assert by_name["S1_Z_1.sac"].x == 1
+    assert by_name["S1_Z_2.sac"].x == 2
+    assert by_name["S2_Z_1.sac"].coordinate_source == "sac_lonlat"
+    assert by_name["S2_Z_1.sac"].longitude == pytest.approx(116.2)
+
+
+def test_collect_sac_points_array_mode_skips_sac_lonlat(tmp_path: Path) -> None:
+    write_sac(tmp_path / "2" / "S2_Z_1.sac", stla=40.1, stlo=116.2)
+
+    points = collect_sac_points(tmp_path, coordinate_mode="array")
+
+    assert len(points) == 1
+    assert points[0].coordinate_source == "array"
+    assert points[0].latitude is None
+    assert points[0].x == 1
+
+
+def test_collect_station_points_keeps_one_representative_per_folder(tmp_path: Path) -> None:
+    write_sac(tmp_path / "1" / "S1_Z_1.sac")
+    write_sac(tmp_path / "1" / "S1_Z_2.sac")
+    write_sac(tmp_path / "2" / "S2_Z_1.sac")
+    write_sac(tmp_path / "2" / "S2_Z_2.sac")
+
+    points = collect_station_points(tmp_path, coordinate_mode="array")
+
+    assert len(points) == 2
+    assert [point.row for point in points] == [1, 2]
+    assert [point.file_name for point in points] == ["S1_Z_1.sac", "S2_Z_1.sac"]
+    assert [point.x for point in points] == [1.0, 2.0]
+    assert all(point.y == 0.0 for point in points)
+    assert all(point.coordinate_source == "station_index" for point in points)
+
+
+def test_project_array_points_uses_origin_spacing_and_bearings(tmp_path: Path) -> None:
+    write_sac(tmp_path / "1" / "S1_Z_1.sac")
+    write_sac(tmp_path / "1" / "S1_Z_2.sac")
+    points = collect_sac_points(tmp_path)
+
+    projected = project_array_points(
+        points,
+        origin_latitude=40.0,
+        origin_longitude=116.0,
+        x_spacing_m=10.0,
+        y_spacing_m=20.0,
+        x_bearing_deg=90.0,
+        y_bearing_deg=0.0,
+    )
+
+    assert projected[0].latitude == 40.0
+    assert projected[0].longitude == 116.0
+    assert projected[1].longitude > projected[0].longitude
+    assert round(projected[1].latitude, 6) == 40.0
