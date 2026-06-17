@@ -45,3 +45,19 @@ uv run --no-sync python scripts/plot_geophone_coordinates.py \
 这会额外输出:
 
 - `outputs/geophone_map.html`
+
+## 长白山第二次平铺 SAC 数据
+
+对于 `z_component` 这种平铺文件结构，脚本会自动按文件名前缀识别台站，并自动查找同一采集目录里的 `dccigugps.db`:
+
+```bash
+uv run --no-sync python scripts/plot_geophone_coordinates.py \
+  --data-root "/Volumes/CSIM_LAB/DATA/长白山数据/长白山第二次采集数据(20240822~20250622)/SAC格式/z_component" \
+  --output-dir outputs/changbaishan_second
+```
+
+输出:
+
+- `outputs/changbaishan_second/geophone_array_coordinates.csv`
+- `outputs/changbaishan_second/geophone_array.png`
+- `outputs/changbaishan_second/geophone_map.html`

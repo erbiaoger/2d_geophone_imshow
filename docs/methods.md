@@ -28,3 +28,13 @@ lon = lon0 + degrees(east_m / (R * cos(lat0)))
 ```
 
 其中 `R = 6371008.8 m`。这个方法适合尺度较小的检波器阵列；如果阵列覆盖范围很大或需要厘米级精度，应改用测量坐标系或高精度大地测量投影。
+
+## SOLOLITE GPS 数据库
+
+长白山第二次采集的 SAC 文件是平铺结构，台站编号位于文件名前缀:
+
+```text
+453010490.00000001.2024.08.14.06.55.20.000.z.sac -> station=453010490
+```
+
+同一采集目录的 `原始数据/SOLOLITE/changbaishan/changbaishan/dccigugps.db` 中，`IGUGPSDATA` 表保存了 `IGU_ID`, `GPS_LAT`, `GPS_LONG`, `GPS_ELV` 和有效 GPS 记录数。脚本按 `IGU_ID` 匹配 SAC 台站编号，并用 `GPS_REC_VALID_COUNT` 对多段 GPS 记录做加权平均，得到每台站的经纬度用于静态图和 OpenStreetMap HTML。

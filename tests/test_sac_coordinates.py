@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import struct
 import sys
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from geophone_map.sac_coordinates import (
     SAC_NULL,
     collect_sac_points,
+    collect_filename_station_points,
     collect_station_points,
+    load_igu_gps_coordinates,
     parse_array_position,
     read_sac_coordinates,
     valid_lonlat,
@@ -109,6 +112,33 @@ def test_collect_station_points_keeps_one_representative_per_folder(tmp_path: Pa
     assert all(point.coordinate_source == "station_index" for point in points)
 
 
+def test_collect_filename_station_points_keeps_one_representative_per_station(tmp_path: Path) -> None:
+    write_sac(tmp_path / "453010490.00000001.2024.08.14.06.55.20.000.z.sac")
+    write_sac(tmp_path / "453010490.00000001.2024.08.22.06.55.20.000.z.sac")
+    write_sac(tmp_path / "453011985.00000001.2024.08.14.03.45.16.000.z.sac")
+
+    points = collect_filename_station_points(tmp_path, coordinate_mode="array")
+
+    assert len(points) == 2
+    assert [point.row for point in points] == [453010490, 453011985]
+    assert [point.x for point in points] == [1.0, 2.0]
+    assert all(point.coordinate_source == "station_index" for point in points)
+
+
+def test_collect_filename_station_points_uses_gps_coordinates(tmp_path: Path) -> None:
+    write_sac(tmp_path / "453010490.00000001.2024.08.14.06.55.20.000.z.sac")
+    db_path = tmp_path / "dccigugps.db"
+    create_gps_db(db_path)
+    gps = load_igu_gps_coordinates(db_path)
+
+    points = collect_filename_station_points(tmp_path, coordinate_mode="auto", gps_coordinates=gps)
+
+    assert len(points) == 1
+    assert points[0].coordinate_source == "gps_db"
+    assert points[0].latitude == pytest.approx(42.1)
+    assert points[0].longitude == pytest.approx(128.2)
+
+
 def test_project_array_points_uses_origin_spacing_and_bearings(tmp_path: Path) -> None:
     write_sac(tmp_path / "1" / "S1_Z_1.sac")
     write_sac(tmp_path / "1" / "S1_Z_2.sac")
@@ -128,3 +158,26 @@ def test_project_array_points_uses_origin_spacing_and_bearings(tmp_path: Path) -
     assert projected[0].longitude == 116.0
     assert projected[1].longitude > projected[0].longitude
     assert round(projected[1].latitude, 6) == 40.0
+
+
+def create_gps_db(path: Path) -> None:
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE IGUGPSDATA (
+                IGU_ID INT,
+                GPS_LAT FLOAT,
+                GPS_LONG FLOAT,
+                GPS_ELV FLOAT,
+                GPS_REC_VALID_COUNT INT
+            )
+            """
+        )
+        connection.executemany(
+            "INSERT INTO IGUGPSDATA VALUES (?, ?, ?, ?, ?)",
+            [
+                (453010490, 42.0, 128.0, 1000.0, 1),
+                (453010490, 42.2, 128.4, 1200.0, 1),
+                (453010490, 0.0, 0.0, 0.0, 100),
+            ],
+        )

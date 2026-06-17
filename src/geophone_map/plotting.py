@@ -5,6 +5,7 @@ from pathlib import Path
 import folium
 import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.ticker import ScalarFormatter
 
 from geophone_map.sac_coordinates import GeophonePoint, valid_lonlat
 
@@ -41,15 +42,30 @@ def save_static_plot(points: list[GeophonePoint], output_path: Path, *, title: s
     if df.empty:
         raise ValueError("No points are available for plotting")
 
-    station_index_plot = df["column"].isna().all() and df["coordinate_source"].eq("station_index").any()
-    xlabel = "Station index / Longitude" if station_index_plot else "Column index / Longitude"
-    ylabel = "Relative Y / Latitude" if station_index_plot else "Line index / Latitude"
-    colorbar_label = "Station index" if station_index_plot else "Line index"
+    station_plot = df["column"].isna().all()
+    lonlat_plot = df["latitude"].notna().any() and df["longitude"].notna().any()
+    if lonlat_plot:
+        xlabel = "Longitude"
+        ylabel = "Latitude"
+    elif station_plot:
+        xlabel = "Station index"
+        ylabel = "Relative Y"
+    else:
+        xlabel = "Column index / Longitude"
+        ylabel = "Line index / Latitude"
+    colorbar_label = "Station ID" if station_plot else "Line index"
+
+    color_values = df["row"].fillna(0)
+    annotate_station_labels = False
+    if station_plot and color_values.max() > 100_000:
+        color_values = pd.Series(range(1, len(df) + 1), index=df.index)
+        colorbar_label = "Station order"
+        annotate_station_labels = True
 
     scatter = ax.scatter(
         df["x"],
         df["y"],
-        c=df["row"].fillna(0),
+        c=color_values,
         s=12,
         cmap="viridis",
         alpha=0.85,
@@ -59,11 +75,27 @@ def save_static_plot(points: list[GeophonePoint], output_path: Path, *, title: s
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
+    if lonlat_plot:
+        for axis in (ax.xaxis, ax.yaxis):
+            formatter = ScalarFormatter(useOffset=False)
+            formatter.set_scientific(False)
+            axis.set_major_formatter(formatter)
     _expand_degenerate_axis(ax, df["x"].min(), df["x"].max(), axis="x")
     _expand_degenerate_axis(ax, df["y"].min(), df["y"].max(), axis="y")
-    if df["x"].nunique() > 1 and df["y"].nunique() > 1:
+    if df["x"].nunique() > 1 and df["y"].nunique() > 1 and not lonlat_plot:
         ax.set_aspect("equal", adjustable="box")
     ax.grid(True, alpha=0.25, linewidth=0.6)
+    if annotate_station_labels:
+        for _, row in df.iterrows():
+            label = str(int(row["row"]))[-4:] if pd.notna(row["row"]) else row["file_name"][:4]
+            ax.annotate(
+                label,
+                (row["x"], row["y"]),
+                xytext=(3, 3),
+                textcoords="offset points",
+                fontsize=6,
+                alpha=0.75,
+            )
     fig.colorbar(scatter, ax=ax, label=colorbar_label)
     fig.savefig(output_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
