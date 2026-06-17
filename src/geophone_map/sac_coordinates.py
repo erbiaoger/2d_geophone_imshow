@@ -238,7 +238,7 @@ def collect_filename_station_points(
 
     gps_coordinates = gps_coordinates or {}
     station_paths: dict[str, Path] = {}
-    for path in sorted(Path(root).glob("*.sac"), key=_filename_station_sort_key):
+    for path in sorted(Path(root).rglob("*.sac"), key=_filename_station_sort_key):
         station_id = parse_filename_station_id(path)
         if station_id is None:
             continue
