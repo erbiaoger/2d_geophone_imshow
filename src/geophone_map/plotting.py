@@ -73,7 +73,8 @@ def save_static_plot(points: list[GeophonePoint], output_path: Path, *, title: s
         df["y"],
         c=color_values,
         s=12,
-        cmap="terrain" if has_elevation else "viridis",
+        marker="^",
+        cmap="jet" if has_elevation else "viridis",
         alpha=0.85,
         edgecolors="none",
         rasterized=True,
@@ -99,8 +100,9 @@ def save_static_plot(points: list[GeophonePoint], output_path: Path, *, title: s
                 (row["x"], row["y"]),
                 xytext=(3, 3),
                 textcoords="offset points",
-                fontsize=6,
-                alpha=0.75,
+            fontsize=8,
+            color="white" if has_elevation else "black",
+            alpha=0.95,
             )
     fig.colorbar(scatter, ax=ax, label=colorbar_label)
     fig.savefig(output_path, bbox_inches="tight", facecolor="white")
@@ -210,7 +212,8 @@ def save_basemap_plot(
         df["y"],
         c=color_values,
         s=34,
-        cmap="terrain" if has_elevation else "autumn",
+        marker="^",
+        cmap="jet" if has_elevation else "autumn",
         edgecolors="black",
         linewidths=0.55,
         zorder=5,
@@ -221,8 +224,8 @@ def save_basemap_plot(
             (row["x"], row["y"]),
             xytext=(4, 4),
             textcoords="offset points",
-            fontsize=6,
-            color="black",
+            fontsize=8,
+            color="white",
             zorder=6,
         )
 
