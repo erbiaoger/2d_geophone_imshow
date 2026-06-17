@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+import branca.colormap as bcm
 import folium
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -160,26 +161,79 @@ def save_folium_map(points: list[GeophonePoint], output_path: Path) -> int:
     center_lat = sum(point.latitude for point in lonlat_points if point.latitude is not None) / len(lonlat_points)
     center_lon = sum(point.longitude for point in lonlat_points if point.longitude is not None) / len(lonlat_points)
 
-    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=16, tiles="OpenStreetMap")
-    folium.FeatureGroup(name="Geophones", show=True).add_to(fmap)
+    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=10, tiles=None, control_scale=True)
+    folium.TileLayer(
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        attr="Tiles (C) Esri",
+        name="Esri World Imagery",
+        overlay=False,
+        control=True,
+    ).add_to(fmap)
+    folium.TileLayer(
+        tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+        attr="Tiles (C) Esri",
+        name="Esri World Topo",
+        overlay=False,
+        control=True,
+    ).add_to(fmap)
+    marker_group = folium.FeatureGroup(name="Geophones", show=True)
+    marker_group.add_to(fmap)
 
-    for point in lonlat_points:
+    elevations = [point.elevation_m for point in lonlat_points if point.elevation_m is not None]
+    if elevations:
+        elevation_min = min(elevations)
+        elevation_max = max(elevations)
+        if math.isclose(elevation_min, elevation_max):
+            elevation_min -= 1.0
+            elevation_max += 1.0
+        color_scale = bcm.LinearColormap(
+            colors=["#00007f", "#0000ff", "#00ffff", "#ffff00", "#ff7f00", "#ff0000", "#7f0000"],
+            vmin=elevation_min,
+            vmax=elevation_max,
+            caption="Elevation (m)",
+        )
+    else:
+        color_scale = None
+
+    bounds: list[list[float]] = []
+    for index, point in enumerate(lonlat_points, start=1):
+        marker_color = color_scale(point.elevation_m) if color_scale is not None and point.elevation_m is not None else "#ffb000"
+        station_label = str(int(point.row))[-4:] if point.row is not None else str(index)
         popup = (
             f"{point.file_name}<br>"
+            f"station={station_label}<br>"
             f"row={point.row}, column={point.column}<br>"
+            f"elevation={point.elevation_m if point.elevation_m is not None else 'N/A'} m<br>"
             f"source={point.coordinate_source}"
         )
-        folium.CircleMarker(
+        folium.RegularPolygonMarker(
             location=[point.latitude, point.longitude],
-            radius=2,
-            color="#2563eb",
+            number_of_sides=3,
+            radius=9,
+            rotation=0,
+            color="black",
             fill=True,
-            fill_color="#ef4444",
-            fill_opacity=0.8,
+            fill_color=marker_color,
+            fill_opacity=0.9,
             weight=1,
             popup=popup,
-        ).add_to(fmap)
+        ).add_to(marker_group)
+        folium.Marker(
+            location=[point.latitude, point.longitude],
+            icon=folium.DivIcon(
+                html=(
+                    f"<div style=\"font-family:'Times New Roman'; font-size:12px; "
+                    f"font-weight:bold; color:white; text-shadow:0 0 3px black; "
+                    f"transform: translate(8px, -6px);\">{station_label}</div>"
+                )
+            ),
+        ).add_to(marker_group)
+        bounds.append([point.latitude, point.longitude])
 
+    if color_scale is not None:
+        color_scale.add_to(fmap)
+    if bounds:
+        fmap.fit_bounds(bounds, padding=(20, 20))
     folium.LayerControl().add_to(fmap)
     fmap.save(output_path)
     return len(lonlat_points)

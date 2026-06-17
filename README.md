@@ -1,5 +1,7 @@
 # 2D Geophone Imshow
 
+![geophone_basemap](https://raw.githubusercontent.com/erbiaoger/PicGo/main/260407geophone_basemap.png)
+
 这个项目用于从 SAC 地震波形数据中提取检波器/台站坐标，并输出坐标表、阵列图和可选地图叠加 HTML。默认按“一个数字文件夹=一台检波器”处理，所以这批数据会输出 60 个点。
 
 ## 文件夹
