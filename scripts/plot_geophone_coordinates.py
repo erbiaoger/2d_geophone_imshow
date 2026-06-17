@@ -23,7 +23,8 @@
     outputs/geophone_array_coordinates.csv  坐标明细表
     outputs/geophone_array.png              阵列坐标 PNG 图
     outputs/geophone_basemap.png            有经纬度时生成的静态地图底图 PNG
-    outputs/geophone_map.html               有经纬度时生成的 OpenStreetMap 叠加地图
+    outputs/geophone_map.html               有经纬度时生成的离线 HTML 地图
+    outputs/geophone_map_live.html          有经纬度时生成的在线高精度缩放 HTML 地图
 
 地图范围:
     可用 --basemap-margin-factor 和 --html-map-margin-factor 扩大显示范围。
@@ -195,6 +196,7 @@ def main() -> None:
     png_path = args.output_dir / "geophone_array.png"
     basemap_path = args.output_dir / "geophone_basemap.png"
     html_path = args.output_dir / "geophone_map.html"
+    live_html_path = args.output_dir / "geophone_map_live.html"
 
     save_points_csv(points, csv_path)
     title = "Geophone Station Coordinates" if group_by != "file" else "2D Geophone Array Coordinates"
@@ -212,6 +214,15 @@ def main() -> None:
         provider_name=args.basemap_provider,
         margin_factor=args.html_map_margin_factor,
         basemap_zoom=args.html_basemap_zoom,
+        map_mode="embedded",
+    )
+    live_mapped_count = save_folium_map(
+        points,
+        live_html_path,
+        provider_name=args.basemap_provider,
+        margin_factor=args.html_map_margin_factor,
+        basemap_zoom=args.html_basemap_zoom,
+        map_mode="live",
     )
 
     print(f"Collected points: {len(points)}")
@@ -223,6 +234,7 @@ def main() -> None:
         print("Basemap PNG: skipped because no real/projected longitude-latitude coordinates are available")
     if mapped_count:
         print(f"HTML map: {html_path} ({mapped_count} points)")
+        print(f"HTML live map: {live_html_path} ({live_mapped_count} points)")
     else:
         print("HTML map: skipped because no real/projected longitude-latitude coordinates are available")
     if gps_db is not None:

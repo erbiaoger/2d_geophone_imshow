@@ -157,6 +157,7 @@ def save_folium_map(
     provider_name: str = "Esri.WorldImagery",
     margin_factor: float = 1.2,
     basemap_zoom: int | None = None,
+    map_mode: str = "embedded",
 ) -> int:
     lonlat_points = [
         point
@@ -178,27 +179,31 @@ def save_folium_map(
     xlim, ylim = _expanded_mercator_extent(x_values, y_values, margin_factor=margin_factor)
 
     fmap = folium.Map(location=[center_lat, center_lon], zoom_start=10, tiles=None, control_scale=True)
-    basemap = _fetch_xyz_basemap(
-        xlim,
-        ylim,
-        provider_name=provider_name,
-        cache_dir=output_path.parent / ".tile_cache",
-        zoom_override=basemap_zoom,
-    )
-    if basemap is not None:
-        image, extent, _ = basemap
-        west, east, south, north = extent
-        west_lon, south_lat = _web_mercator_to_lonlat(west, south)
-        east_lon, north_lat = _web_mercator_to_lonlat(east, north)
-        folium.raster_layers.ImageOverlay(
-            image=_pil_image_to_data_url(image),
-            bounds=[[south_lat, west_lon], [north_lat, east_lon]],
-            opacity=1.0,
-            interactive=False,
-            cross_origin=False,
-            zindex=1,
-            name=f"{provider_name} (embedded)",
-        ).add_to(fmap)
+    if map_mode == "live":
+        live_layer = folium.TileLayer(**_folium_tile_layer_kwargs(provider_name))
+        live_layer.add_to(fmap)
+    else:
+        basemap = _fetch_xyz_basemap(
+            xlim,
+            ylim,
+            provider_name=provider_name,
+            cache_dir=output_path.parent / ".tile_cache",
+            zoom_override=basemap_zoom,
+        )
+        if basemap is not None:
+            image, extent, _ = basemap
+            west, east, south, north = extent
+            west_lon, south_lat = _web_mercator_to_lonlat(west, south)
+            east_lon, north_lat = _web_mercator_to_lonlat(east, north)
+            folium.raster_layers.ImageOverlay(
+                image=_pil_image_to_data_url(image),
+                bounds=[[south_lat, west_lon], [north_lat, east_lon]],
+                opacity=1.0,
+                interactive=False,
+                cross_origin=False,
+                zindex=1,
+                name=f"{provider_name} (embedded)",
+            ).add_to(fmap)
     marker_group = folium.FeatureGroup(name="Geophones", show=True)
     marker_group.add_to(fmap)
 
@@ -532,3 +537,17 @@ def _xyz_provider(provider_name: str) -> dict[str, str | int]:
         },
     }
     return providers.get(provider_name, providers["Esri.WorldTopoMap"])
+
+
+def _folium_tile_layer_kwargs(provider_name: str) -> dict[str, str | int | bool]:
+    provider = _xyz_provider(provider_name)
+    zoom = int(provider["zoom"])
+    return {
+        "tiles": str(provider["url"]),
+        "attr": str(provider["attribution"]),
+        "name": f"{provider_name} (live)",
+        "overlay": False,
+        "control": True,
+        "max_zoom": max(zoom, 19),
+        "max_native_zoom": max(zoom, 19),
+    }

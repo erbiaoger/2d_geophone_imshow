@@ -47,6 +47,7 @@ uv run --no-sync python scripts/plot_geophone_coordinates.py \
 这会额外输出:
 
 - `outputs/geophone_map.html`
+- `outputs/geophone_map_live.html`
 
 ## 长白山第二次平铺 SAC 数据
 
@@ -64,6 +65,19 @@ uv run --no-sync python scripts/plot_geophone_coordinates.py \
 - `outputs/changbaishan_second/geophone_array.png`
 - `outputs/changbaishan_second/geophone_basemap.png`: 默认卫星底图，点颜色代表海拔高度。
 - `outputs/changbaishan_second/geophone_map.html`
+- `outputs/changbaishan_second/geophone_map_live.html`
+
+其中:
+
+- `geophone_map.html`: 离线版，双击即可打开，但底图放大后会逐渐变糊。
+- `geophone_map_live.html`: 在线瓦片版，需要通过 `localhost` 打开，缩放时会继续请求更高分辨率底图。
+
+可用本地服务脚本打开在线高精度缩放版:
+
+```bash
+uv run --no-sync python scripts/serve_map.py \
+  --directory outputs/changbaishan_second
+```
 
 如果想换底图风格，可以加 `--basemap-provider`:
 
