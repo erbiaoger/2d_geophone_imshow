@@ -60,4 +60,16 @@ uv run --no-sync python scripts/plot_geophone_coordinates.py \
 
 - `outputs/changbaishan_second/geophone_array_coordinates.csv`
 - `outputs/changbaishan_second/geophone_array.png`
+- `outputs/changbaishan_second/geophone_basemap.png`
 - `outputs/changbaishan_second/geophone_map.html`
+
+如果想换底图风格，可以加 `--basemap-provider`:
+
+```bash
+uv run --no-sync python scripts/plot_geophone_coordinates.py \
+  --data-root "/Volumes/CSIM_LAB/DATA/长白山数据/长白山第二次采集数据(20240822~20250622)/SAC格式/z_component" \
+  --output-dir outputs/changbaishan_second \
+  --basemap-provider Esri.WorldImagery
+```
+
+可选值包括 `Esri.WorldTopoMap`, `Esri.WorldImagery`, `Esri.WorldPhysical`, `OpenTopoMap`。

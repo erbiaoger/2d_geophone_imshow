@@ -20,6 +20,7 @@ from geophone_map.sac_coordinates import (
     valid_lonlat,
 )
 from geophone_map.georeference import project_array_points
+from geophone_map.plotting import _lonlat_to_web_mercator, _web_mercator_to_lonlat
 
 
 def write_sac(path: Path, *, stla: float = SAC_NULL, stlo: float = SAC_NULL) -> None:
@@ -158,6 +159,19 @@ def test_project_array_points_uses_origin_spacing_and_bearings(tmp_path: Path) -
     assert projected[0].longitude == 116.0
     assert projected[1].longitude > projected[0].longitude
     assert round(projected[1].latitude, 6) == 40.0
+
+
+def test_lonlat_to_web_mercator_projects_origin_and_positive_longitude() -> None:
+    x0, y0 = _lonlat_to_web_mercator(0.0, 0.0)
+    x1, y1 = _lonlat_to_web_mercator(128.0, 42.0)
+    lon1, lat1 = _web_mercator_to_lonlat(x1, y1)
+
+    assert x0 == pytest.approx(0.0)
+    assert y0 == pytest.approx(0.0, abs=1e-8)
+    assert x1 > x0
+    assert y1 > y0
+    assert lon1 == pytest.approx(128.0)
+    assert lat1 == pytest.approx(42.0)
 
 
 def create_gps_db(path: Path) -> None:

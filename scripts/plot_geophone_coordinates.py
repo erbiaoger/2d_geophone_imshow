@@ -22,6 +22,7 @@
 主要输出:
     outputs/geophone_array_coordinates.csv  坐标明细表
     outputs/geophone_array.png              阵列坐标 PNG 图
+    outputs/geophone_basemap.png            有经纬度时生成的静态地图底图 PNG
     outputs/geophone_map.html               有经纬度时生成的 OpenStreetMap 叠加地图
 """
 
@@ -37,7 +38,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from geophone_map.georeference import project_array_points
-from geophone_map.plotting import save_folium_map, save_points_csv, save_static_plot
+from geophone_map.plotting import save_basemap_plot, save_folium_map, save_points_csv, save_static_plot
 from geophone_map.sac_coordinates import collect_sac_points, collect_station_points
 from geophone_map.sac_coordinates import (
     collect_filename_station_points,
@@ -86,6 +87,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "SOLOLITE dccigugps.db 路径，用于给平铺台站文件补经纬度。"
             "默认 auto，会在数据目录上级自动查找；设为 none 可禁用。"
+        ),
+    )
+    parser.add_argument(
+        "--basemap-provider",
+        default="Esri.WorldTopoMap",
+        help=(
+            "静态 PNG 底图瓦片源，默认 Esri.WorldTopoMap。"
+            "也可用 Esri.WorldPhysical、Esri.WorldImagery、OpenTopoMap。"
         ),
     )
     parser.add_argument(
@@ -162,16 +171,27 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     csv_path = args.output_dir / "geophone_array_coordinates.csv"
     png_path = args.output_dir / "geophone_array.png"
+    basemap_path = args.output_dir / "geophone_basemap.png"
     html_path = args.output_dir / "geophone_map.html"
 
     save_points_csv(points, csv_path)
     title = "Geophone Station Coordinates" if group_by != "file" else "2D Geophone Array Coordinates"
     save_static_plot(points, png_path, title=title)
+    basemap_count = save_basemap_plot(
+        points,
+        basemap_path,
+        title=title,
+        provider_name=args.basemap_provider,
+    )
     mapped_count = save_folium_map(points, html_path)
 
     print(f"Collected points: {len(points)}")
     print(f"CSV: {csv_path}")
     print(f"PNG: {png_path}")
+    if basemap_count:
+        print(f"Basemap PNG: {basemap_path} ({basemap_count} points)")
+    else:
+        print("Basemap PNG: skipped because no real/projected longitude-latitude coordinates are available")
     if mapped_count:
         print(f"HTML map: {html_path} ({mapped_count} points)")
     else:
