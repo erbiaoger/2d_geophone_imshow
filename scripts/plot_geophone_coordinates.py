@@ -24,6 +24,10 @@
     outputs/geophone_array.png              阵列坐标 PNG 图
     outputs/geophone_basemap.png            有经纬度时生成的静态地图底图 PNG
     outputs/geophone_map.html               有经纬度时生成的 OpenStreetMap 叠加地图
+
+地图范围:
+    可用 --basemap-margin-factor 和 --html-map-margin-factor 扩大显示范围。
+    数值越大，台站周围预留的地图范围越大。
 """
 
 from __future__ import annotations
@@ -96,6 +100,24 @@ def build_parser() -> argparse.ArgumentParser:
             "静态 PNG 底图瓦片源，默认 Esri.WorldImagery 卫星影像。"
             "也可用 Esri.WorldTopoMap、Esri.WorldPhysical、OpenTopoMap。"
         ),
+    )
+    parser.add_argument(
+        "--basemap-margin-factor",
+        type=float,
+        default=0.18,
+        help="静态底图范围扩展系数，默认 0.18。数值越大，显示范围越大。",
+    )
+    parser.add_argument(
+        "--html-map-margin-factor",
+        type=float,
+        default=1.2,
+        help="HTML 地图范围扩展系数，默认 1.2。数值越大，显示范围越大。",
+    )
+    parser.add_argument(
+        "--html-basemap-zoom",
+        type=int,
+        default=14,
+        help="HTML 离线底图瓦片缩放级别，默认 14。数值越小，覆盖范围越大、生成越快。",
     )
     parser.add_argument(
         "--origin-lat",
@@ -182,11 +204,14 @@ def main() -> None:
         basemap_path,
         title=title,
         provider_name=args.basemap_provider,
+        margin_factor=args.basemap_margin_factor,
     )
     mapped_count = save_folium_map(
         points,
         html_path,
         provider_name=args.basemap_provider,
+        margin_factor=args.html_map_margin_factor,
+        basemap_zoom=args.html_basemap_zoom,
     )
 
     print(f"Collected points: {len(points)}")

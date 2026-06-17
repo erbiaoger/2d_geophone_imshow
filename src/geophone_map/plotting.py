@@ -155,6 +155,8 @@ def save_folium_map(
     output_path: Path,
     *,
     provider_name: str = "Esri.WorldImagery",
+    margin_factor: float = 1.2,
+    basemap_zoom: int | None = None,
 ) -> int:
     lonlat_points = [
         point
@@ -173,10 +175,7 @@ def save_folium_map(
     ]
     x_values = [item[0] for item in mercator_points]
     y_values = [item[1] for item in mercator_points]
-    x_margin = max((max(x_values) - min(x_values)) * 0.18, 120.0)
-    y_margin = max((max(y_values) - min(y_values)) * 0.18, 120.0)
-    xlim = (min(x_values) - x_margin, max(x_values) + x_margin)
-    ylim = (min(y_values) - y_margin, max(y_values) + y_margin)
+    xlim, ylim = _expanded_mercator_extent(x_values, y_values, margin_factor=margin_factor)
 
     fmap = folium.Map(location=[center_lat, center_lon], zoom_start=10, tiles=None, control_scale=True)
     basemap = _fetch_xyz_basemap(
@@ -184,6 +183,7 @@ def save_folium_map(
         ylim,
         provider_name=provider_name,
         cache_dir=output_path.parent / ".tile_cache",
+        zoom_override=basemap_zoom,
     )
     if basemap is not None:
         image, extent, _ = basemap
@@ -256,7 +256,9 @@ def save_folium_map(
     if color_scale is not None:
         color_scale.add_to(fmap)
     if bounds:
-        fmap.fit_bounds(bounds, padding=(20, 20))
+        west_lon, south_lat = _web_mercator_to_lonlat(xlim[0], ylim[0])
+        east_lon, north_lat = _web_mercator_to_lonlat(xlim[1], ylim[1])
+        fmap.fit_bounds([[south_lat, west_lon], [north_lat, east_lon]], padding=(20, 20))
     folium.LayerControl().add_to(fmap)
     fmap.save(output_path)
     return len(lonlat_points)
@@ -268,6 +270,7 @@ def save_basemap_plot(
     *,
     title: str,
     provider_name: str = "Esri.WorldImagery",
+    margin_factor: float = 0.18,
 ) -> int:
     lonlat_points = [
         point
@@ -295,10 +298,9 @@ def save_basemap_plot(
         )
     df = pd.DataFrame(rows)
 
-    x_margin = max((df["x"].max() - df["x"].min()) * 0.18, 120.0)
-    y_margin = max((df["y"].max() - df["y"].min()) * 0.18, 120.0)
-    ax.set_xlim(df["x"].min() - x_margin, df["x"].max() + x_margin)
-    ax.set_ylim(df["y"].min() - y_margin, df["y"].max() + y_margin)
+    xlim, ylim = _expanded_mercator_extent(df["x"].tolist(), df["y"].tolist(), margin_factor=margin_factor)
+    ax.set_xlim(*xlim)
+    ax.set_ylim(*ylim)
 
     basemap = _fetch_xyz_basemap(
         ax.get_xlim(),
@@ -384,6 +386,22 @@ def _expand_degenerate_axis(ax, lower: float, upper: float, *, axis: str) -> Non
     setter(lower - margin, upper + margin)
 
 
+def _expanded_mercator_extent(
+    x_values: list[float],
+    y_values: list[float],
+    *,
+    margin_factor: float,
+    minimum_margin_m: float = 120.0,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    x_min = min(x_values)
+    x_max = max(x_values)
+    y_min = min(y_values)
+    y_max = max(y_values)
+    x_margin = max((x_max - x_min) * margin_factor, minimum_margin_m)
+    y_margin = max((y_max - y_min) * margin_factor, minimum_margin_m)
+    return (x_min - x_margin, x_max + x_margin), (y_min - y_margin, y_max + y_margin)
+
+
 def _lonlat_to_web_mercator(longitude: float, latitude: float) -> tuple[float, float]:
     radius = 6_378_137.0
     clipped_latitude = max(min(latitude, 85.05112878), -85.05112878)
@@ -427,9 +445,10 @@ def _fetch_xyz_basemap(
     *,
     provider_name: str,
     cache_dir: Path,
+    zoom_override: int | None = None,
 ):
     provider = _xyz_provider(provider_name)
-    zoom = provider["zoom"]
+    zoom = int(zoom_override) if zoom_override is not None else int(provider["zoom"])
     min_x, max_x = xlim
     min_y, max_y = ylim
     west_tile, south_tile = _web_mercator_to_tile(min_x, min_y, zoom)
