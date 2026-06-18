@@ -4,6 +4,8 @@
 
 这个项目用于从 SAC 地震波形数据中提取检波器/台站坐标，并输出坐标表、阵列图和可选地图叠加 HTML。默认按“一个数字文件夹=一台检波器”处理，所以这批数据会输出 60 个点。
 
+![CleanShot 2026-06-18 at 14.20.09](https://raw.githubusercontent.com/erbiaoger/PicGo/main/260407CleanShot%202026-06-18%20at%2014.20.09.png)
+
 推荐流程现在是两步:
 
 1. 从 SAC 提取标准台站 CSV
