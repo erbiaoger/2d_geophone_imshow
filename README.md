@@ -177,7 +177,7 @@ uv run --no-sync python scripts/interpolate_fiber_route.py \
 输出:
 
 - `fiber_10m_coordinates.csv`: 每 10 m 点的经纬度、累计距离和所在原始线段。
-- `fiber_10m_plan.png`: 原始点、插值测线和 10 m 点平面图。
+- `fiber_10m_plan.png`: 带地形底图的原始点、插值测线和 10 m 点平面图。
 - `fiber_10m_map.html`: 可交互 HTML 地图，显示可调间隔的 10 m 样点，并每 100 m 标一个里程点。
 - `fiber_summary.txt`: 光纤总长度和点数摘要。
 

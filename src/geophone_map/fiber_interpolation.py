@@ -9,8 +9,15 @@ from pathlib import Path
 import folium
 from branca.element import Element
 from matplotlib import colors as mcolors
+from matplotlib.ticker import FuncFormatter
 import matplotlib.pyplot as plt
 
+from geophone_map.plotting import (
+    _expanded_mercator_extent,
+    _fetch_xyz_basemap,
+    _lonlat_to_web_mercator,
+    _web_mercator_to_lonlat,
+)
 from geophone_map.sac_coordinates import GeophonePoint, valid_lonlat
 
 EARTH_RADIUS_M = 6_371_008.8
@@ -187,6 +194,8 @@ def save_fiber_plan_png(
     *,
     title: str,
     label_interval_m: float = 100.0,
+    basemap_provider: str = "Esri.WorldTopoMap",
+    basemap_zoom: int = 13,
 ) -> None:
     if label_interval_m <= 0:
         raise ValueError("label_interval_m must be positive")
@@ -195,27 +204,45 @@ def save_fiber_plan_png(
     fig, ax = plt.subplots(figsize=(9, 8), dpi=180, constrained_layout=True)
     elevation_min, elevation_max = _sample_elevation_range(samples)
     elevations = [_elevation_for_plot(sample.elevation_m, elevation_min) for sample in samples]
+    sample_xy = [_lonlat_to_web_mercator(sample.longitude, sample.latitude) for sample in samples]
+    xlim, ylim = _expanded_mercator_extent([x for x, _ in sample_xy], [y for _, y in sample_xy], margin_factor=0.08)
+    ax.set_xlim(*xlim)
+    ax.set_ylim(*ylim)
+    basemap = _fetch_xyz_basemap(
+        xlim,
+        ylim,
+        provider_name=basemap_provider,
+        cache_dir=output_path.parent / ".tile_cache",
+        zoom_override=basemap_zoom,
+    )
+    if basemap is not None:
+        image, extent, attribution = basemap
+        ax.imshow(image, extent=extent, origin="upper", zorder=0)
+        ax.text(0.01, 0.01, attribution, transform=ax.transAxes, fontsize=5, color="black", alpha=0.75, zorder=7)
     ax.plot(
-        [sample.longitude for sample in samples],
-        [sample.latitude for sample in samples],
+        [x for x, _ in sample_xy],
+        [y for _, y in sample_xy],
         color="#1f2937",
         linewidth=1.3,
         label="Interpolated fiber",
+        zorder=2,
     )
     scatter = ax.scatter(
-        [sample.longitude for sample in samples],
-        [sample.latitude for sample in samples],
+        [x for x, _ in sample_xy],
+        [y for _, y in sample_xy],
         s=7,
         c=elevations,
         cmap="jet" if elevation_min is not None else None,
         alpha=0.65,
         label="10 m samples",
         rasterized=True,
+        zorder=3,
     )
     labels = [sample for sample in samples if _is_label_sample(sample, label_interval_m)]
+    label_xy = [_lonlat_to_web_mercator(sample.longitude, sample.latitude) for sample in labels]
     ax.scatter(
-        [sample.longitude for sample in labels],
-        [sample.latitude for sample in labels],
+        [x for x, _ in label_xy],
+        [y for _, y in label_xy],
         s=18,
         c=[_elevation_for_plot(sample.elevation_m, elevation_min) for sample in labels],
         cmap="jet" if elevation_min is not None else None,
@@ -225,9 +252,10 @@ def save_fiber_plan_png(
         zorder=3,
     )
     originals = [point for point in original_points if valid_lonlat(point.latitude, point.longitude)]
+    original_xy = [_lonlat_to_web_mercator(point.longitude, point.latitude) for point in originals]
     ax.scatter(
-        [point.longitude for point in originals],
-        [point.latitude for point in originals],
+        [x for x, _ in original_xy],
+        [y for _, y in original_xy],
         s=24,
         marker="^",
         c=[_elevation_for_plot(point.elevation_m, elevation_min) for point in originals],
@@ -240,7 +268,9 @@ def save_fiber_plan_png(
     ax.set_title(title)
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
-    ax.grid(True, alpha=0.25, linewidth=0.6)
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{_web_mercator_to_lonlat(value, 0.0)[0]:.4f}°"))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{_web_mercator_to_lonlat(0.0, value)[1]:.4f}°"))
+    ax.grid(True, color="white", alpha=0.45, linewidth=0.5)
     ax.legend(loc="best")
     if elevation_min is not None:
         colorbar = fig.colorbar(scatter, ax=ax, pad=0.02)

@@ -20,7 +20,7 @@
 
 输出:
     fiber_10m_coordinates.csv   每 10 m 插值坐标点，含累计距离和所在原始线段
-    fiber_10m_plan.png          原始点、测线和 10 m 点的平面图
+    fiber_10m_plan.png          带地形底图的原始点、测线和 10 m 点平面图
     fiber_10m_map.html          可交互 HTML 地图，含卫星/地形底图
     fiber_summary.txt           光纤总长度、点数和间距摘要
 """

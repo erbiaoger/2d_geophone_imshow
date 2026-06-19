@@ -10,6 +10,7 @@ from geophone_map.fiber_interpolation import (
     interpolate_fiber_along_route,
     interpolate_fiber_points,
     save_fiber_map_html,
+    save_fiber_plan_png,
 )
 from geophone_map.sac_coordinates import GeophonePoint
 
@@ -151,3 +152,23 @@ def test_fiber_map_html_has_point_interval_selector(tmp_path: Path) -> None:
     assert "applyFiberPointInterval" in html
     assert "distance: 50.000" in html
     assert html.index("var map_") < html.index("var fiberPointIntervalControl")
+
+
+def test_fiber_plan_png_requests_topographic_basemap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def fake_fetch_basemap(xlim, ylim, *, provider_name, cache_dir, zoom_override=None):
+        calls.append((provider_name, zoom_override))
+        return None
+
+    monkeypatch.setattr("geophone_map.fiber_interpolation._fetch_xyz_basemap", fake_fetch_basemap)
+    samples = [
+        FiberSample(0, 0.0, 42.0, 128.0, 1000.0, 0, 1),
+        FiberSample(1, 10.0, 42.0001, 128.0001, 1001.0, 0, 1),
+    ]
+
+    output_path = tmp_path / "fiber.png"
+    save_fiber_plan_png([point(42.0, 128.0, 1000.0), point(42.0001, 128.0001, 1001.0)], samples, output_path, title="test")
+
+    assert calls == [("Esri.WorldTopoMap", 13)]
+    assert output_path.exists()
