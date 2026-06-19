@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import folium
+from branca.element import Element
 from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
 
@@ -333,6 +334,8 @@ def save_fiber_map_html(
             popup=f"{index}<br>{point.file_name}<br>{point.elevation_m or 'N/A'} m",
         ).add_to(measured_group)
     measured_group.add_to(fmap)
+    if elevation_min is not None and elevation_max is not None:
+        _add_elevation_colorbar(fmap, elevation_min, elevation_max)
     folium.LayerControl(position="topright", collapsed=False).add_to(fmap)
     fmap.fit_bounds([(sample.latitude, sample.longitude) for sample in samples], padding=(20, 20))
     fmap.save(output_path)
@@ -393,6 +396,53 @@ def _elevation_color_hex(elevation_m: float | None, elevation_min: float | None,
     else:
         value = (elevation_m - elevation_min) / (elevation_max - elevation_min)
     return mcolors.to_hex(plt.get_cmap("jet")(max(0.0, min(1.0, value))))
+
+
+def _add_elevation_colorbar(fmap: folium.Map, elevation_min: float, elevation_max: float) -> None:
+    gradient = ", ".join(_elevation_color_hex(elevation_min + (elevation_max - elevation_min) * i / 10, elevation_min, elevation_max) for i in range(11))
+    html = f"""
+    <style>
+      .fiber-elevation-legend {{
+        position: absolute;
+        left: 18px;
+        bottom: 28px;
+        z-index: 1000;
+        width: 190px;
+        padding: 8px 10px;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(0, 0, 0, 0.25);
+        border-radius: 4px;
+        font-family: "Times New Roman", serif;
+        color: #111827;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+      }}
+      .fiber-elevation-legend-title {{
+        font-size: 13px;
+        font-weight: bold;
+        margin-bottom: 5px;
+      }}
+      .fiber-elevation-legend-bar {{
+        height: 12px;
+        background: linear-gradient(to right, {gradient});
+        border: 1px solid rgba(0, 0, 0, 0.35);
+      }}
+      .fiber-elevation-legend-scale {{
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        margin-top: 3px;
+      }}
+    </style>
+    <div class="fiber-elevation-legend">
+      <div class="fiber-elevation-legend-title">Elevation (m)</div>
+      <div class="fiber-elevation-legend-bar"></div>
+      <div class="fiber-elevation-legend-scale">
+        <span>{elevation_min:.1f}</span>
+        <span>{elevation_max:.1f}</span>
+      </div>
+    </div>
+    """
+    fmap.get_root().html.add_child(Element(html))
 
 
 def _same_lonlat(first: tuple[float, float], second: tuple[float, float]) -> bool:

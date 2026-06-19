@@ -117,3 +117,6 @@ def test_fiber_map_html_colors_samples_by_elevation(tmp_path: Path) -> None:
     html = html_path.read_text(encoding="utf-8")
     assert "#000080" in html
     assert "#800000" in html
+    assert "Elevation (m)" in html
+    assert "1000.0" in html
+    assert "1100.0" in html
