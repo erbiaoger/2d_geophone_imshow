@@ -226,6 +226,7 @@ def save_fiber_map_html(
     ).add_to(fmap)
     sample_group = folium.FeatureGroup(name="10 m points", show=True)
     for sample in samples:
+        elevation_text = _elevation_text(sample.elevation_m)
         folium.CircleMarker(
             location=(sample.latitude, sample.longitude),
             radius=3,
@@ -233,7 +234,7 @@ def save_fiber_map_html(
             fill=True,
             fill_opacity=0.75,
             weight=0,
-            popup=f"{sample.index}<br>{sample.distance_m:.1f} m",
+            popup=f"{sample.index}<br>distance={sample.distance_m:.1f} m<br>elevation={elevation_text}",
         ).add_to(sample_group)
     sample_group.add_to(fmap)
 
@@ -249,7 +250,7 @@ def save_fiber_map_html(
             fill_color="#facc15",
             fill_opacity=0.95,
             weight=1,
-            popup=f"{sample.distance_m:.0f} m",
+            popup=f"distance={sample.distance_m:.0f} m<br>elevation={_elevation_text(sample.elevation_m)}",
         ).add_to(kilometer_group)
         folium.Marker(
             location=(sample.latitude, sample.longitude),
@@ -310,6 +311,10 @@ def _sample_at_distance(
         segment_start=segment_start,
         segment_end=segment_end,
     )
+
+
+def _elevation_text(elevation_m: float | None) -> str:
+    return "N/A" if elevation_m is None else f"{elevation_m:.1f} m"
 
 
 def _segment_index(cumulative: list[float], distance_m: float) -> int:

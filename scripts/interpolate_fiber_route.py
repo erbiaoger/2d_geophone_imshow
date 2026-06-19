@@ -82,6 +82,7 @@ def main() -> None:
             [
                 f"source={args.station_csv}",
                 f"route_source={route_source}",
+                "elevation_source=linear_interpolation_from_measured_points",
                 f"spacing_m={args.spacing_m:.3f}",
                 f"total_length_m={total_length_m:.3f}",
                 f"total_length_km={total_length_m / 1000.0:.6f}",

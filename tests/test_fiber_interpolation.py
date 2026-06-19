@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from geophone_map.fiber_interpolation import interpolate_fiber_along_route, interpolate_fiber_points
+from geophone_map.fiber_interpolation import (
+    FiberSample,
+    interpolate_fiber_along_route,
+    interpolate_fiber_points,
+    save_fiber_map_html,
+)
 from geophone_map.sac_coordinates import GeophonePoint
 
 
@@ -54,5 +59,19 @@ def test_interpolate_fiber_along_route_follows_route_bend() -> None:
 
     assert total_length_m > 190.0
     assert any(sample.latitude > 42.0008 and sample.longitude < 128.0002 for sample in interpolated)
+    assert all(sample.elevation_m is not None for sample in interpolated)
     assert interpolated[-1].latitude == pytest.approx(42.001)
     assert interpolated[-1].longitude == pytest.approx(128.001)
+
+
+def test_fiber_map_html_shows_interpolated_sample_elevation(tmp_path: Path) -> None:
+    samples = [
+        FiberSample(0, 0.0, 42.0, 128.0, 1000.0, 0, 1),
+        FiberSample(1, 10.0, 42.0001, 128.0001, 1001.5, 0, 1),
+    ]
+
+    html_path = tmp_path / "fiber.html"
+    save_fiber_map_html([point(42.0, 128.0, 1000.0), point(42.0001, 128.0001, 1001.5)], samples, html_path, title="test")
+
+    html = html_path.read_text(encoding="utf-8")
+    assert "elevation=1001.5 m" in html
