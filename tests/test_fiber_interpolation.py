@@ -120,3 +120,33 @@ def test_fiber_map_html_colors_samples_by_elevation(tmp_path: Path) -> None:
     assert "Elevation (m)" in html
     assert "1000.0" in html
     assert "1100.0" in html
+
+
+def test_fiber_map_html_uses_configurable_label_interval(tmp_path: Path) -> None:
+    samples = [
+        FiberSample(index, index * 10.0, 42.0 + index * 0.0001, 128.0, 1000.0 + index, index, index + 1)
+        for index in range(5)
+    ]
+
+    html_path = tmp_path / "fiber.html"
+    save_fiber_map_html([point(42.0, 128.0, 1000.0), point(42.0004, 128.0, 1004.0)], samples, html_path, title="test", label_interval_m=20)
+
+    html = html_path.read_text(encoding="utf-8")
+    assert "20 m labels" in html
+    assert "distance=20 m" in html
+
+
+def test_fiber_map_html_has_point_interval_selector(tmp_path: Path) -> None:
+    samples = [
+        FiberSample(index, index * 10.0, 42.0 + index * 0.0001, 128.0, 1000.0 + index, index, index + 1)
+        for index in range(6)
+    ]
+
+    html_path = tmp_path / "fiber.html"
+    save_fiber_map_html([point(42.0, 128.0, 1000.0), point(42.0005, 128.0, 1005.0)], samples, html_path, title="test")
+
+    html = html_path.read_text(encoding="utf-8")
+    assert "fiber-point-interval-select" in html
+    assert '<option value=\\"50\\">50 m</option>' in html
+    assert "applyFiberPointInterval" in html
+    assert "distance: 50.000" in html

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -185,7 +186,10 @@ def save_fiber_plan_png(
     output_path: Path,
     *,
     title: str,
+    label_interval_m: float = 100.0,
 ) -> None:
+    if label_interval_m <= 0:
+        raise ValueError("label_interval_m must be positive")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.rcParams["font.family"] = "Times New Roman"
     fig, ax = plt.subplots(figsize=(9, 8), dpi=180, constrained_layout=True)
@@ -208,7 +212,7 @@ def save_fiber_plan_png(
         label="10 m samples",
         rasterized=True,
     )
-    labels = [sample for sample in samples if sample.index % 10 == 0]
+    labels = [sample for sample in samples if _is_label_sample(sample, label_interval_m)]
     ax.scatter(
         [sample.longitude for sample in labels],
         [sample.latitude for sample in labels],
@@ -217,7 +221,7 @@ def save_fiber_plan_png(
         cmap="jet" if elevation_min is not None else None,
         edgecolors="#111827",
         linewidths=0.35,
-        label="100 m labels",
+        label=f"{label_interval_m:g} m labels",
         zorder=3,
     )
     originals = [point for point in original_points if valid_lonlat(point.latitude, point.longitude)]
@@ -251,7 +255,10 @@ def save_fiber_map_html(
     output_path: Path,
     *,
     title: str,
+    label_interval_m: float = 100.0,
 ) -> None:
+    if label_interval_m <= 0:
+        raise ValueError("label_interval_m must be positive")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     center_lat = sum(sample.latitude for sample in samples) / len(samples)
     center_lon = sum(sample.longitude for sample in samples) / len(samples)
@@ -276,11 +283,12 @@ def save_fiber_map_html(
         tooltip=title,
     ).add_to(fmap)
     elevation_min, elevation_max = _sample_elevation_range(samples)
-    sample_group = folium.FeatureGroup(name="10 m points", show=True)
+    sample_group = folium.FeatureGroup(name="Sample points", show=True)
+    sample_marker_refs: list[tuple[str, float]] = []
     for sample in samples:
         elevation_text = _elevation_text(sample.elevation_m)
         color = _elevation_color_hex(sample.elevation_m, elevation_min, elevation_max)
-        folium.CircleMarker(
+        marker = folium.CircleMarker(
             location=(sample.latitude, sample.longitude),
             radius=3,
             color=color,
@@ -289,12 +297,15 @@ def save_fiber_map_html(
             fill_opacity=0.75,
             weight=0,
             popup=f"{sample.index}<br>distance={sample.distance_m:.1f} m<br>elevation={elevation_text}",
-        ).add_to(sample_group)
+        )
+        marker.add_to(sample_group)
+        sample_marker_refs.append((marker.get_name(), sample.distance_m))
     sample_group.add_to(fmap)
+    _add_sample_interval_control(fmap, sample_group.get_name(), sample_marker_refs)
 
-    kilometer_group = folium.FeatureGroup(name="100 m labels", show=True)
+    kilometer_group = folium.FeatureGroup(name=f"{label_interval_m:g} m labels", show=True)
     for sample in samples:
-        if sample.index % 10 != 0:
+        if not _is_label_sample(sample, label_interval_m):
             continue
         color = _elevation_color_hex(sample.elevation_m, elevation_min, elevation_max)
         folium.CircleMarker(
@@ -375,6 +386,11 @@ def _elevation_text(elevation_m: float | None) -> str:
     return "N/A" if elevation_m is None else f"{elevation_m:.1f} m"
 
 
+def _is_label_sample(sample: FiberSample, label_interval_m: float) -> bool:
+    nearest = round(sample.distance_m / label_interval_m) * label_interval_m
+    return math.isclose(sample.distance_m, nearest, abs_tol=1e-6)
+
+
 def _elevation_for_plot(elevation_m: float | None, fallback: float | None) -> float | str:
     if elevation_m is not None:
         return elevation_m
@@ -443,6 +459,73 @@ def _add_elevation_colorbar(fmap: folium.Map, elevation_min: float, elevation_ma
     </div>
     """
     fmap.get_root().html.add_child(Element(html))
+
+
+def _add_sample_interval_control(fmap: folium.Map, sample_layer_name: str, sample_marker_refs: list[tuple[str, float]]) -> None:
+    intervals = [10, 20, 50, 100, 200, 500, 1000]
+    markers = ",\n".join(
+        f"        {{ marker: {marker_name}, distance: {distance_m:.3f} }}"
+        for marker_name, distance_m in sample_marker_refs
+    )
+    script = f"""
+    var fiberPointIntervalControl = L.control({{ position: "topright" }});
+    fiberPointIntervalControl.onAdd = function () {{
+      var div = L.DomUtil.create("div", "fiber-point-interval-control");
+      div.innerHTML = '<div class="fiber-point-interval-title">Points</div>'
+        + '<select id="fiber-point-interval-select">'
+        + {json.dumps("".join(f'<option value="{interval}">{interval} m</option>' for interval in intervals))}
+        + '</select>';
+      L.DomEvent.disableClickPropagation(div);
+      L.DomEvent.disableScrollPropagation(div);
+      return div;
+    }};
+    fiberPointIntervalControl.addTo({fmap.get_name()});
+
+    var fiberPointIntervalMarkers = [
+{markers}
+    ];
+    function applyFiberPointInterval(intervalMeters) {{
+      fiberPointIntervalMarkers.forEach(function (entry) {{
+        var nearest = Math.round(entry.distance / intervalMeters) * intervalMeters;
+        var shouldShow = Math.abs(entry.distance - nearest) < 0.001;
+        var isShown = {sample_layer_name}.hasLayer(entry.marker);
+        if (shouldShow && !isShown) {{
+          entry.marker.addTo({sample_layer_name});
+        }} else if (!shouldShow && isShown) {{
+          {sample_layer_name}.removeLayer(entry.marker);
+        }}
+      }});
+    }}
+    document.getElementById("fiber-point-interval-select").addEventListener("change", function (event) {{
+      applyFiberPointInterval(Number(event.target.value));
+    }});
+    applyFiberPointInterval(10);
+    """
+    style = """
+    <style>
+      .fiber-point-interval-control {
+        padding: 7px 8px;
+        background: rgba(255, 255, 255, 0.94);
+        border: 1px solid rgba(0, 0, 0, 0.25);
+        border-radius: 4px;
+        font-family: "Times New Roman", serif;
+        color: #111827;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+      }
+      .fiber-point-interval-title {
+        font-size: 12px;
+        font-weight: bold;
+        margin-bottom: 4px;
+      }
+      .fiber-point-interval-control select {
+        width: 82px;
+        font-family: "Times New Roman", serif;
+        font-size: 12px;
+      }
+    </style>
+    """
+    fmap.get_root().html.add_child(Element(style))
+    fmap.get_root().script.add_child(Element(script))
 
 
 def _same_lonlat(first: tuple[float, float], second: tuple[float, float]) -> bool:

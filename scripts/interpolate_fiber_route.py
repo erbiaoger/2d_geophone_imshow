@@ -15,7 +15,8 @@
       --output-dir outputs/changbai_fiber_10m \
       --spacing-m 10 \
       --road-ref S509 \
-      --target-length-m 10000
+      --target-length-m 10000 \
+      --label-interval-m 100
 
 输出:
     fiber_10m_coordinates.csv   每 10 m 插值坐标点，含累计距离和所在原始线段
@@ -54,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--station-csv", type=Path, required=True, help="输入坐标 CSV/TXT 路径。")
     parser.add_argument("--output-dir", type=Path, required=True, help="输出目录。")
     parser.add_argument("--spacing-m", type=float, default=10.0, help="插值点间距，单位 m，默认 10。")
+    parser.add_argument("--label-interval-m", type=float, default=100.0, help="HTML/PNG 里程标记间距，单位 m，默认 100。通常用 10 的倍数。")
     parser.add_argument("--road-ref", help="沿 OSM 道路编号插值，例如 S509。省略时按原始点折线插值。")
     parser.add_argument("--target-length-m", type=float, help="从起点沿路线输出到指定总长度，单位 m，例如 10000。")
     parser.add_argument("--title", default="DAS Fiber 10 m Interpolation", help="输出图标题。")
@@ -85,8 +87,8 @@ def main() -> None:
     summary_path = args.output_dir / "fiber_summary.txt"
 
     save_fiber_samples_csv(samples, csv_path)
-    save_fiber_plan_png(points, samples, png_path, title=args.title)
-    save_fiber_map_html(points, samples, html_path, title=args.title)
+    save_fiber_plan_png(points, samples, png_path, title=args.title, label_interval_m=args.label_interval_m)
+    save_fiber_map_html(points, samples, html_path, title=args.title, label_interval_m=args.label_interval_m)
     summary_path.write_text(
         "\n".join(
             [
@@ -94,6 +96,7 @@ def main() -> None:
                 f"route_source={route_source}",
                 "elevation_source=linear_interpolation_from_measured_points_hold_last_after_last_measurement",
                 f"spacing_m={args.spacing_m:.3f}",
+                f"label_interval_m={args.label_interval_m:.3f}",
                 f"target_length_m={args.target_length_m:.3f}" if args.target_length_m is not None else "target_length_m=",
                 f"total_length_m={total_length_m:.3f}",
                 f"total_length_km={total_length_m / 1000.0:.6f}",

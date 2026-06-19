@@ -170,16 +170,18 @@ uv run --no-sync python scripts/interpolate_fiber_route.py \
   --output-dir outputs/changbai_fiber_s509_10km_10m \
   --spacing-m 10 \
   --road-ref S509 \
-  --target-length-m 10000
+  --target-length-m 10000 \
+  --label-interval-m 100
 ```
 
 输出:
 
 - `fiber_10m_coordinates.csv`: 每 10 m 点的经纬度、累计距离和所在原始线段。
 - `fiber_10m_plan.png`: 原始点、插值测线和 10 m 点平面图。
-- `fiber_10m_map.html`: 可交互 HTML 地图，显示 10 m 点，并每 100 m 标一个里程点。
+- `fiber_10m_map.html`: 可交互 HTML 地图，显示可调间隔的 10 m 样点，并每 100 m 标一个里程点。
 - `fiber_summary.txt`: 光纤总长度和点数摘要。
 
 PNG 和 HTML 中的测线点都按 `elevation_m` 使用 `jet` 色标上色。
+HTML 右上角 `Points` 下拉框可选择每隔 10/20/50/100/200/500/1000 m 显示一个样点；如果要改变 PNG 和 HTML 的里程标记间隔，可设置 `--label-interval-m 20/50/100/200`，通常使用 10 m 的倍数。
 
 高程说明: 实测范围内按原始测点高程沿道路累计距离线性插值；超过最后一个实测点的延伸段保持最后一个实测高程。

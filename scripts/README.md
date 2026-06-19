@@ -78,5 +78,12 @@ uv run --no-sync python scripts/interpolate_fiber_route.py \
   --output-dir outputs/fiber_10m \
   --spacing-m 10 \
   --road-ref S509 \
-  --target-length-m 10000
+  --target-length-m 10000 \
+  --label-interval-m 100
 ```
+
+说明:
+
+- `--spacing-m` 控制实际输出 CSV 的插值点间距。
+- HTML 里的 `Points` 下拉框可选择每隔 10/20/50/100/200/500/1000 m 显示一个样点。
+- `--label-interval-m` 控制 PNG 和 HTML 里程标记间距，通常用 10 m 的倍数。
