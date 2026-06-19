@@ -301,7 +301,8 @@ def save_fiber_map_html(
         marker.add_to(sample_group)
         sample_marker_refs.append((marker.get_name(), sample.distance_m))
     sample_group.add_to(fmap)
-    _add_sample_interval_control(fmap, sample_group.get_name(), sample_marker_refs)
+    interval_style, interval_script = _sample_interval_control_assets(fmap, sample_group.get_name(), sample_marker_refs)
+    fmap.get_root().html.add_child(Element(interval_style))
 
     kilometer_group = folium.FeatureGroup(name=f"{label_interval_m:g} m labels", show=True)
     for sample in samples:
@@ -350,6 +351,7 @@ def save_fiber_map_html(
     folium.LayerControl(position="topright", collapsed=False).add_to(fmap)
     fmap.fit_bounds([(sample.latitude, sample.longitude) for sample in samples], padding=(20, 20))
     fmap.save(output_path)
+    _append_script_to_saved_html(output_path, interval_script)
 
 
 def _sample_at_distance(
@@ -461,7 +463,7 @@ def _add_elevation_colorbar(fmap: folium.Map, elevation_min: float, elevation_ma
     fmap.get_root().html.add_child(Element(html))
 
 
-def _add_sample_interval_control(fmap: folium.Map, sample_layer_name: str, sample_marker_refs: list[tuple[str, float]]) -> None:
+def _sample_interval_control_assets(fmap: folium.Map, sample_layer_name: str, sample_marker_refs: list[tuple[str, float]]) -> tuple[str, str]:
     intervals = [10, 20, 50, 100, 200, 500, 1000]
     markers = ",\n".join(
         f"        {{ marker: {marker_name}, distance: {distance_m:.3f} }}"
@@ -524,8 +526,15 @@ def _add_sample_interval_control(fmap: folium.Map, sample_layer_name: str, sampl
       }
     </style>
     """
-    fmap.get_root().html.add_child(Element(style))
-    fmap.get_root().script.add_child(Element(script))
+    return style, script
+
+
+def _append_script_to_saved_html(output_path: Path, script: str) -> None:
+    html = output_path.read_text(encoding="utf-8")
+    closing = "</script>\n</html>"
+    if closing not in html:
+        raise ValueError("Could not find final script block in saved folium HTML")
+    output_path.write_text(html.replace(closing, f"{script}\n{closing}", 1), encoding="utf-8")
 
 
 def _same_lonlat(first: tuple[float, float], second: tuple[float, float]) -> bool:

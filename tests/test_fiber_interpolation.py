@@ -150,3 +150,4 @@ def test_fiber_map_html_has_point_interval_selector(tmp_path: Path) -> None:
     assert '<option value=\\"50\\">50 m</option>' in html
     assert "applyFiberPointInterval" in html
     assert "distance: 50.000" in html
+    assert html.index("var map_") < html.index("var fiberPointIntervalControl")
