@@ -66,6 +66,57 @@ def interpolate_fiber_points(points: list[GeophonePoint], *, spacing_m: float = 
     return samples, total_length_m
 
 
+def interpolate_fiber_along_route(
+    points: list[GeophonePoint],
+    route_lonlat: list[tuple[float, float]],
+    *,
+    spacing_m: float = 10.0,
+) -> tuple[list[FiberSample], float]:
+    """Interpolate a DAS fiber line along a road/control route."""
+    if spacing_m <= 0:
+        raise ValueError("spacing_m must be positive")
+    lonlat_points = [point for point in points if valid_lonlat(point.latitude, point.longitude)]
+    if len(lonlat_points) < 2:
+        raise ValueError("At least two valid longitude-latitude points are required")
+    if len(route_lonlat) < 2:
+        raise ValueError("At least two route points are required")
+
+    all_latitudes = [point.latitude for point in lonlat_points if point.latitude is not None] + [lat for lat, _ in route_lonlat]
+    all_longitudes = [point.longitude for point in lonlat_points if point.longitude is not None] + [lon for _, lon in route_lonlat]
+    lat0 = math.radians(sum(all_latitudes) / len(all_latitudes))
+    lon0 = math.radians(sum(all_longitudes) / len(all_longitudes))
+    route_xy = [_lonlat_to_local_xy(lon, lat, lat0=lat0, lon0=lon0) for lat, lon in route_lonlat]
+
+    start_xy = _lonlat_to_local_xy(lonlat_points[0].longitude, lonlat_points[0].latitude, lat0=lat0, lon0=lon0)
+    end_xy = _lonlat_to_local_xy(lonlat_points[-1].longitude, lonlat_points[-1].latitude, lat0=lat0, lon0=lon0)
+    start_distance, start_projected = _project_xy_to_polyline(start_xy, route_xy)
+    end_distance, end_projected = _project_xy_to_polyline(end_xy, route_xy)
+    clipped_xy = _clip_route_xy(route_xy, start_distance, start_projected, end_distance, end_projected)
+    cumulative = _polyline_cumulative(clipped_xy)
+    total_length_m = cumulative[-1]
+    if total_length_m == 0:
+        raise ValueError("Fiber line length is zero")
+
+    anchors = _route_elevation_anchors(lonlat_points, clipped_xy, lat0=lat0, lon0=lon0)
+    target_distances = [i * spacing_m for i in range(int(total_length_m // spacing_m) + 1)]
+    if not math.isclose(target_distances[-1], total_length_m):
+        target_distances.append(total_length_m)
+
+    samples = [
+        _sample_route_at_distance(
+            distance_m=distance_m,
+            index=index,
+            route_xy=clipped_xy,
+            cumulative=cumulative,
+            anchors=anchors,
+            lat0=lat0,
+            lon0=lon0,
+        )
+        for index, distance_m in enumerate(target_distances)
+    ]
+    return samples, total_length_m
+
+
 def save_fiber_samples_csv(samples: list[FiberSample], output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as handle:
@@ -105,11 +156,22 @@ def save_fiber_plan_png(
     ax.scatter(
         [sample.longitude for sample in samples],
         [sample.latitude for sample in samples],
-        s=4,
+        s=7,
         color="#38bdf8",
         alpha=0.65,
         label="10 m samples",
         rasterized=True,
+    )
+    labels = [sample for sample in samples if sample.index % 10 == 0]
+    ax.scatter(
+        [sample.longitude for sample in labels],
+        [sample.latitude for sample in labels],
+        s=18,
+        color="#facc15",
+        edgecolors="#111827",
+        linewidths=0.35,
+        label="100 m labels",
+        zorder=3,
     )
     originals = [point for point in original_points if valid_lonlat(point.latitude, point.longitude)]
     ax.scatter(
@@ -162,11 +224,11 @@ def save_fiber_map_html(
         opacity=0.9,
         tooltip=title,
     ).add_to(fmap)
-    sample_group = folium.FeatureGroup(name="10 m points", show=False)
+    sample_group = folium.FeatureGroup(name="10 m points", show=True)
     for sample in samples:
         folium.CircleMarker(
             location=(sample.latitude, sample.longitude),
-            radius=2,
+            radius=3,
             color="#00d4ff",
             fill=True,
             fill_opacity=0.75,
@@ -174,6 +236,32 @@ def save_fiber_map_html(
             popup=f"{sample.index}<br>{sample.distance_m:.1f} m",
         ).add_to(sample_group)
     sample_group.add_to(fmap)
+
+    kilometer_group = folium.FeatureGroup(name="100 m labels", show=True)
+    for sample in samples:
+        if sample.index % 10 != 0:
+            continue
+        folium.CircleMarker(
+            location=(sample.latitude, sample.longitude),
+            radius=5,
+            color="#111827",
+            fill=True,
+            fill_color="#facc15",
+            fill_opacity=0.95,
+            weight=1,
+            popup=f"{sample.distance_m:.0f} m",
+        ).add_to(kilometer_group)
+        folium.Marker(
+            location=(sample.latitude, sample.longitude),
+            icon=folium.DivIcon(
+                html=(
+                    f"<div style=\"font-family:'Times New Roman'; font-size:11px; "
+                    f"font-weight:bold; color:white; text-shadow:0 0 3px black; "
+                    f"transform: translate(7px, -7px);\">{sample.distance_m / 1000:.1f} km</div>"
+                )
+            ),
+        ).add_to(kilometer_group)
+    kilometer_group.add_to(fmap)
 
     measured_group = folium.FeatureGroup(name="Measured points", show=True)
     for index, point in enumerate([point for point in original_points if valid_lonlat(point.latitude, point.longitude)], start=1):
@@ -229,6 +317,123 @@ def _segment_index(cumulative: list[float], distance_m: float) -> int:
         if cumulative[index] <= distance_m <= cumulative[index + 1]:
             return index
     return len(cumulative) - 2
+
+
+def _sample_route_at_distance(
+    *,
+    distance_m: float,
+    index: int,
+    route_xy: list[tuple[float, float]],
+    cumulative: list[float],
+    anchors: list[tuple[float, float]],
+    lat0: float,
+    lon0: float,
+) -> FiberSample:
+    segment_start = max(0, min(len(cumulative) - 2, _segment_index(cumulative, distance_m)))
+    segment_end = segment_start + 1
+    start_distance = cumulative[segment_start]
+    end_distance = cumulative[segment_end]
+    ratio = 0.0 if end_distance == start_distance else (distance_m - start_distance) / (end_distance - start_distance)
+    x0, y0 = route_xy[segment_start]
+    x1, y1 = route_xy[segment_end]
+    longitude, latitude = _local_xy_to_lonlat(x0 + (x1 - x0) * ratio, y0 + (y1 - y0) * ratio, lat0=lat0, lon0=lon0)
+    return FiberSample(
+        index=index,
+        distance_m=distance_m,
+        latitude=latitude,
+        longitude=longitude,
+        elevation_m=_elevation_at_distance(distance_m, anchors),
+        segment_start=segment_start,
+        segment_end=segment_end,
+    )
+
+
+def _polyline_cumulative(points: list[tuple[float, float]]) -> list[float]:
+    cumulative = [0.0]
+    for start, end in zip(points, points[1:]):
+        cumulative.append(cumulative[-1] + math.dist(start, end))
+    return cumulative
+
+
+def _project_xy_to_polyline(point: tuple[float, float], polyline: list[tuple[float, float]]) -> tuple[float, tuple[float, float]]:
+    cumulative = _polyline_cumulative(polyline)
+    best_distance = 0.0
+    best_xy = polyline[0]
+    best_error = math.inf
+    px, py = point
+    for index, (start, end) in enumerate(zip(polyline, polyline[1:])):
+        x0, y0 = start
+        x1, y1 = end
+        dx = x1 - x0
+        dy = y1 - y0
+        length2 = dx * dx + dy * dy
+        ratio = 0.0 if length2 == 0 else max(0.0, min(1.0, ((px - x0) * dx + (py - y0) * dy) / length2))
+        projected = (x0 + dx * ratio, y0 + dy * ratio)
+        error = math.dist(point, projected)
+        if error < best_error:
+            best_error = error
+            best_xy = projected
+            best_distance = cumulative[index] + math.dist(start, projected)
+    return best_distance, best_xy
+
+
+def _clip_route_xy(
+    route_xy: list[tuple[float, float]],
+    start_distance: float,
+    start_xy: tuple[float, float],
+    end_distance: float,
+    end_xy: tuple[float, float],
+) -> list[tuple[float, float]]:
+    if start_distance > end_distance:
+        clipped = _clip_route_xy(route_xy, end_distance, end_xy, start_distance, start_xy)
+        return list(reversed(clipped))
+
+    cumulative = _polyline_cumulative(route_xy)
+    clipped = [start_xy]
+    for distance, point in zip(cumulative[1:-1], route_xy[1:-1]):
+        if start_distance < distance < end_distance:
+            clipped.append(point)
+    clipped.append(end_xy)
+    return _dedupe_adjacent_xy(clipped)
+
+
+def _dedupe_adjacent_xy(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    deduped = [points[0]]
+    for point in points[1:]:
+        if math.dist(deduped[-1], point) > 1e-6:
+            deduped.append(point)
+    return deduped
+
+
+def _route_elevation_anchors(
+    points: list[GeophonePoint],
+    route_xy: list[tuple[float, float]],
+    *,
+    lat0: float,
+    lon0: float,
+) -> list[tuple[float, float]]:
+    anchors = []
+    for point in points:
+        if point.elevation_m is None:
+            continue
+        xy = _lonlat_to_local_xy(point.longitude, point.latitude, lat0=lat0, lon0=lon0)
+        distance, _ = _project_xy_to_polyline(xy, route_xy)
+        anchors.append((distance, point.elevation_m))
+    return sorted(anchors)
+
+
+def _elevation_at_distance(distance_m: float, anchors: list[tuple[float, float]]) -> float | None:
+    if not anchors:
+        return None
+    if distance_m <= anchors[0][0]:
+        return anchors[0][1]
+    if distance_m >= anchors[-1][0]:
+        return anchors[-1][1]
+    for (d0, z0), (d1, z1) in zip(anchors, anchors[1:]):
+        if d0 <= distance_m <= d1:
+            ratio = 0.0 if d1 == d0 else (distance_m - d0) / (d1 - d0)
+            return z0 + (z1 - z0) * ratio
+    return anchors[-1][1]
 
 
 def _interpolate_elevation(start: float | None, end: float | None, ratio: float) -> float | None:
