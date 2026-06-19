@@ -6,6 +6,7 @@ import pytest
 
 from geophone_map.fiber_interpolation import (
     FiberSample,
+    extend_route_with_connected_routes,
     interpolate_fiber_along_route,
     interpolate_fiber_points,
     save_fiber_map_html,
@@ -62,6 +63,33 @@ def test_interpolate_fiber_along_route_follows_route_bend() -> None:
     assert all(sample.elevation_m is not None for sample in interpolated)
     assert interpolated[-1].latitude == pytest.approx(42.001)
     assert interpolated[-1].longitude == pytest.approx(128.001)
+
+
+def test_interpolate_fiber_along_route_can_extend_to_target_length() -> None:
+    points = [
+        point(42.0, 128.0, 1000.0),
+        point(42.001, 128.0, 1020.0),
+    ]
+    route = [
+        (42.0, 128.0),
+        (42.001, 128.0),
+        (42.002, 128.0),
+    ]
+
+    interpolated, total_length_m = interpolate_fiber_along_route(points, route, spacing_m=50.0, target_length_m=180.0)
+
+    assert total_length_m == pytest.approx(180.0)
+    assert interpolated[-1].latitude > 42.001
+    assert interpolated[-1].elevation_m == pytest.approx(1020.0)
+
+
+def test_extend_route_with_connected_routes_appends_shared_endpoint() -> None:
+    route = [(42.0, 128.0), (42.1, 128.1)]
+    connected = [[(42.1, 128.1), (42.2, 128.2)]]
+
+    extended = extend_route_with_connected_routes(route, connected)
+
+    assert extended == [(42.0, 128.0), (42.1, 128.1), (42.2, 128.2)]
 
 
 def test_fiber_map_html_shows_interpolated_sample_elevation(tmp_path: Path) -> None:

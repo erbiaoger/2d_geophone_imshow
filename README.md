@@ -162,14 +162,15 @@ uv run --no-sync python scripts/plot_geophone_coordinates.py \
 
 ## DAS 测线 10 m 插值
 
-如果已有坐标点沿光纤/道路顺序排列，可沿折线插值出约每 10 m 一个坐标点:
+如果已有坐标点沿光纤/道路顺序排列，可沿道路插值出约每 10 m 一个坐标点，并可继续延伸到指定总长度:
 
 ```bash
 uv run --no-sync python scripts/interpolate_fiber_route.py \
   --station-csv "/Volumes/SanDisk2T4/data/dasQt-other/ChangBai/txt_0611_084816.txt" \
-  --output-dir outputs/changbai_fiber_s509_10m \
+  --output-dir outputs/changbai_fiber_s509_10km_10m \
   --spacing-m 10 \
-  --road-ref S509
+  --road-ref S509 \
+  --target-length-m 10000
 ```
 
 输出:
@@ -178,3 +179,5 @@ uv run --no-sync python scripts/interpolate_fiber_route.py \
 - `fiber_10m_plan.png`: 原始点、插值测线和 10 m 点平面图。
 - `fiber_10m_map.html`: 可交互 HTML 地图，显示 10 m 点，并每 100 m 标一个里程点。
 - `fiber_summary.txt`: 光纤总长度和点数摘要。
+
+高程说明: 实测范围内按原始测点高程沿道路累计距离线性插值；超过最后一个实测点的延伸段保持最后一个实测高程。

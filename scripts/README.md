@@ -77,5 +77,6 @@ uv run --no-sync python scripts/interpolate_fiber_route.py \
   --station-csv "/path/to/stations_or_changbai.txt" \
   --output-dir outputs/fiber_10m \
   --spacing-m 10 \
-  --road-ref S509
+  --road-ref S509 \
+  --target-length-m 10000
 ```

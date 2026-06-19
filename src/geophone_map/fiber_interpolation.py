@@ -24,6 +24,36 @@ class FiberSample:
     segment_end: int
 
 
+def extend_route_with_connected_routes(
+    route_lonlat: list[tuple[float, float]],
+    candidate_routes: list[list[tuple[float, float]]],
+    *,
+    max_links: int = 6,
+) -> list[tuple[float, float]]:
+    extended = list(route_lonlat)
+    used: set[int] = set()
+    for _ in range(max_links):
+        end = extended[-1]
+        match_index = None
+        append_points: list[tuple[float, float]] = []
+        for index, candidate in enumerate(candidate_routes):
+            if index in used or len(candidate) < 2:
+                continue
+            if _same_lonlat(end, candidate[0]):
+                match_index = index
+                append_points = candidate[1:]
+                break
+            if _same_lonlat(end, candidate[-1]):
+                match_index = index
+                append_points = list(reversed(candidate[:-1]))
+                break
+        if match_index is None:
+            break
+        used.add(match_index)
+        extended.extend(append_points)
+    return extended
+
+
 def interpolate_fiber_points(points: list[GeophonePoint], *, spacing_m: float = 10.0) -> tuple[list[FiberSample], float]:
     """Interpolate a DAS fiber line at fixed distance spacing along the input point order."""
     if spacing_m <= 0:
@@ -71,10 +101,13 @@ def interpolate_fiber_along_route(
     route_lonlat: list[tuple[float, float]],
     *,
     spacing_m: float = 10.0,
+    target_length_m: float | None = None,
 ) -> tuple[list[FiberSample], float]:
     """Interpolate a DAS fiber line along a road/control route."""
     if spacing_m <= 0:
         raise ValueError("spacing_m must be positive")
+    if target_length_m is not None and target_length_m <= 0:
+        raise ValueError("target_length_m must be positive")
     lonlat_points = [point for point in points if valid_lonlat(point.latitude, point.longitude)]
     if len(lonlat_points) < 2:
         raise ValueError("At least two valid longitude-latitude points are required")
@@ -91,6 +124,14 @@ def interpolate_fiber_along_route(
     end_xy = _lonlat_to_local_xy(lonlat_points[-1].longitude, lonlat_points[-1].latitude, lat0=lat0, lon0=lon0)
     start_distance, start_projected = _project_xy_to_polyline(start_xy, route_xy)
     end_distance, end_projected = _project_xy_to_polyline(end_xy, route_xy)
+    if target_length_m is not None:
+        route_length_m = _polyline_cumulative(route_xy)[-1]
+        direction = 1.0 if end_distance >= start_distance else -1.0
+        target_end_distance = start_distance + direction * target_length_m
+        if not 0.0 <= target_end_distance <= route_length_m:
+            raise ValueError("target_length_m extends beyond the available route geometry")
+        end_distance = target_end_distance
+        end_projected = _point_at_polyline_distance(route_xy, end_distance)
     clipped_xy = _clip_route_xy(route_xy, start_distance, start_projected, end_distance, end_projected)
     cumulative = _polyline_cumulative(clipped_xy)
     total_length_m = cumulative[-1]
@@ -317,6 +358,10 @@ def _elevation_text(elevation_m: float | None) -> str:
     return "N/A" if elevation_m is None else f"{elevation_m:.1f} m"
 
 
+def _same_lonlat(first: tuple[float, float], second: tuple[float, float]) -> bool:
+    return abs(first[0] - second[0]) < 1e-9 and abs(first[1] - second[1]) < 1e-9
+
+
 def _segment_index(cumulative: list[float], distance_m: float) -> int:
     for index in range(len(cumulative) - 1):
         if cumulative[index] <= distance_m <= cumulative[index + 1]:
@@ -380,6 +425,17 @@ def _project_xy_to_polyline(point: tuple[float, float], polyline: list[tuple[flo
             best_xy = projected
             best_distance = cumulative[index] + math.dist(start, projected)
     return best_distance, best_xy
+
+
+def _point_at_polyline_distance(polyline: list[tuple[float, float]], distance_m: float) -> tuple[float, float]:
+    cumulative = _polyline_cumulative(polyline)
+    segment_start = max(0, min(len(cumulative) - 2, _segment_index(cumulative, distance_m)))
+    start_distance = cumulative[segment_start]
+    end_distance = cumulative[segment_start + 1]
+    ratio = 0.0 if end_distance == start_distance else (distance_m - start_distance) / (end_distance - start_distance)
+    x0, y0 = polyline[segment_start]
+    x1, y1 = polyline[segment_start + 1]
+    return (x0 + (x1 - x0) * ratio, y0 + (y1 - y0) * ratio)
 
 
 def _clip_route_xy(

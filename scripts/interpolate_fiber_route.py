@@ -14,7 +14,8 @@
       --station-csv "/Volumes/SanDisk2T4/data/dasQt-other/ChangBai/txt_0611_084816.txt" \
       --output-dir outputs/changbai_fiber_10m \
       --spacing-m 10 \
-      --road-ref S509
+      --road-ref S509 \
+      --target-length-m 10000
 
 输出:
     fiber_10m_coordinates.csv   每 10 m 插值坐标点，含累计距离和所在原始线段
@@ -38,6 +39,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from geophone_map.fiber_interpolation import (  # noqa: E402
+    extend_route_with_connected_routes,
     interpolate_fiber_along_route,
     interpolate_fiber_points,
     save_fiber_map_html,
@@ -53,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", type=Path, required=True, help="输出目录。")
     parser.add_argument("--spacing-m", type=float, default=10.0, help="插值点间距，单位 m，默认 10。")
     parser.add_argument("--road-ref", help="沿 OSM 道路编号插值，例如 S509。省略时按原始点折线插值。")
+    parser.add_argument("--target-length-m", type=float, help="从起点沿路线输出到指定总长度，单位 m，例如 10000。")
     parser.add_argument("--title", default="DAS Fiber 10 m Interpolation", help="输出图标题。")
     return parser
 
@@ -61,9 +64,16 @@ def main() -> None:
     args = build_parser().parse_args()
     points = load_points_from_csv(args.station_csv)
     if args.road_ref:
-        route = fetch_osm_road_route(points, args.road_ref)
-        samples, total_length_m = interpolate_fiber_along_route(points, route, spacing_m=args.spacing_m)
+        route = fetch_osm_road_route(points, args.road_ref, target_length_m=args.target_length_m)
+        samples, total_length_m = interpolate_fiber_along_route(
+            points,
+            route,
+            spacing_m=args.spacing_m,
+            target_length_m=args.target_length_m,
+        )
         route_source = f"osm_ref={args.road_ref}"
+    elif args.target_length_m is not None:
+        raise SystemExit("--target-length-m requires --road-ref")
     else:
         samples, total_length_m = interpolate_fiber_points(points, spacing_m=args.spacing_m)
         route_source = "input_points"
@@ -82,8 +92,9 @@ def main() -> None:
             [
                 f"source={args.station_csv}",
                 f"route_source={route_source}",
-                "elevation_source=linear_interpolation_from_measured_points",
+                "elevation_source=linear_interpolation_from_measured_points_hold_last_after_last_measurement",
                 f"spacing_m={args.spacing_m:.3f}",
+                f"target_length_m={args.target_length_m:.3f}" if args.target_length_m is not None else "target_length_m=",
                 f"total_length_m={total_length_m:.3f}",
                 f"total_length_km={total_length_m / 1000.0:.6f}",
                 f"sample_count={len(samples)}",
@@ -103,19 +114,20 @@ def main() -> None:
     print(f"Summary: {summary_path}")
 
 
-def fetch_osm_road_route(points, road_ref: str) -> list[tuple[float, float]]:
+def fetch_osm_road_route(points, road_ref: str, *, target_length_m: float | None = None) -> list[tuple[float, float]]:
     lonlat_points = [point for point in points if point.latitude is not None and point.longitude is not None]
     if len(lonlat_points) < 2:
         raise SystemExit("At least two valid points are required to query a road bbox")
-    margin = 0.01
+    margin = max(0.01, (target_length_m or 0.0) / 111_000.0 + 0.02)
     south = min(point.latitude for point in lonlat_points) - margin
     north = max(point.latitude for point in lonlat_points) + margin
     west = min(point.longitude for point in lonlat_points) - margin
     east = max(point.longitude for point in lonlat_points) + margin
+    selector = 'way["highway"]' if target_length_m is not None else f'way["highway"]["ref"="{road_ref}"]'
     query = f"""
 [out:json][timeout:25];
 (
-  way["highway"]["ref"="{road_ref}"]({south},{west},{north},{east});
+  {selector}({south},{west},{north},{east});
 );
 out body;
 >;
@@ -123,19 +135,25 @@ out skel qt;
 """
     data = _overpass_query(query)
     nodes = {element["id"]: (element["lat"], element["lon"]) for element in data["elements"] if element["type"] == "node"}
-    candidates = []
+    road_candidates = []
+    connected_candidates = []
     for element in data["elements"]:
         if element["type"] != "way":
             continue
         tags = element.get("tags", {})
-        if tags.get("ref") != road_ref:
-            continue
         route = [nodes[node_id] for node_id in element["nodes"] if node_id in nodes]
-        if len(route) >= 2:
-            candidates.append(route)
-    if not candidates:
+        if len(route) < 2:
+            continue
+        if tags.get("ref") == road_ref:
+            road_candidates.append(route)
+        else:
+            connected_candidates.append(route)
+    if not road_candidates:
         raise SystemExit(f"No OSM highway with ref={road_ref} found in the input coordinate bbox")
-    return max(candidates, key=len)
+    route = max(road_candidates, key=len)
+    if target_length_m is not None:
+        route = extend_route_with_connected_routes(route, connected_candidates)
+    return route
 
 
 def _overpass_query(query: str) -> dict:
