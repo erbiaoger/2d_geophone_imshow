@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import folium
+from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
 
 from geophone_map.sac_coordinates import GeophonePoint, valid_lonlat
@@ -187,6 +188,8 @@ def save_fiber_plan_png(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.rcParams["font.family"] = "Times New Roman"
     fig, ax = plt.subplots(figsize=(9, 8), dpi=180, constrained_layout=True)
+    elevation_min, elevation_max = _sample_elevation_range(samples)
+    elevations = [_elevation_for_plot(sample.elevation_m, elevation_min) for sample in samples]
     ax.plot(
         [sample.longitude for sample in samples],
         [sample.latitude for sample in samples],
@@ -194,11 +197,12 @@ def save_fiber_plan_png(
         linewidth=1.3,
         label="Interpolated fiber",
     )
-    ax.scatter(
+    scatter = ax.scatter(
         [sample.longitude for sample in samples],
         [sample.latitude for sample in samples],
         s=7,
-        color="#38bdf8",
+        c=elevations,
+        cmap="jet" if elevation_min is not None else None,
         alpha=0.65,
         label="10 m samples",
         rasterized=True,
@@ -208,7 +212,8 @@ def save_fiber_plan_png(
         [sample.longitude for sample in labels],
         [sample.latitude for sample in labels],
         s=18,
-        color="#facc15",
+        c=[_elevation_for_plot(sample.elevation_m, elevation_min) for sample in labels],
+        cmap="jet" if elevation_min is not None else None,
         edgecolors="#111827",
         linewidths=0.35,
         label="100 m labels",
@@ -220,7 +225,8 @@ def save_fiber_plan_png(
         [point.latitude for point in originals],
         s=24,
         marker="^",
-        color="#ef4444",
+        c=[_elevation_for_plot(point.elevation_m, elevation_min) for point in originals],
+        cmap="jet" if elevation_min is not None else None,
         edgecolors="black",
         linewidths=0.35,
         label="Measured points",
@@ -231,6 +237,9 @@ def save_fiber_plan_png(
     ax.set_ylabel("Latitude")
     ax.grid(True, alpha=0.25, linewidth=0.6)
     ax.legend(loc="best")
+    if elevation_min is not None:
+        colorbar = fig.colorbar(scatter, ax=ax, pad=0.02)
+        colorbar.set_label("Elevation (m)")
     fig.savefig(output_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
@@ -265,14 +274,17 @@ def save_fiber_map_html(
         opacity=0.9,
         tooltip=title,
     ).add_to(fmap)
+    elevation_min, elevation_max = _sample_elevation_range(samples)
     sample_group = folium.FeatureGroup(name="10 m points", show=True)
     for sample in samples:
         elevation_text = _elevation_text(sample.elevation_m)
+        color = _elevation_color_hex(sample.elevation_m, elevation_min, elevation_max)
         folium.CircleMarker(
             location=(sample.latitude, sample.longitude),
             radius=3,
-            color="#00d4ff",
+            color=color,
             fill=True,
+            fill_color=color,
             fill_opacity=0.75,
             weight=0,
             popup=f"{sample.index}<br>distance={sample.distance_m:.1f} m<br>elevation={elevation_text}",
@@ -283,12 +295,13 @@ def save_fiber_map_html(
     for sample in samples:
         if sample.index % 10 != 0:
             continue
+        color = _elevation_color_hex(sample.elevation_m, elevation_min, elevation_max)
         folium.CircleMarker(
             location=(sample.latitude, sample.longitude),
             radius=5,
             color="#111827",
             fill=True,
-            fill_color="#facc15",
+            fill_color=color,
             fill_opacity=0.95,
             weight=1,
             popup=f"distance={sample.distance_m:.0f} m<br>elevation={_elevation_text(sample.elevation_m)}",
@@ -307,13 +320,14 @@ def save_fiber_map_html(
 
     measured_group = folium.FeatureGroup(name="Measured points", show=True)
     for index, point in enumerate([point for point in original_points if valid_lonlat(point.latitude, point.longitude)], start=1):
+        color = _elevation_color_hex(point.elevation_m, elevation_min, elevation_max)
         folium.RegularPolygonMarker(
             location=(point.latitude, point.longitude),
             number_of_sides=3,
             radius=8,
             color="black",
             fill=True,
-            fill_color="#ef4444",
+            fill_color=color,
             fill_opacity=0.95,
             weight=1,
             popup=f"{index}<br>{point.file_name}<br>{point.elevation_m or 'N/A'} m",
@@ -356,6 +370,29 @@ def _sample_at_distance(
 
 def _elevation_text(elevation_m: float | None) -> str:
     return "N/A" if elevation_m is None else f"{elevation_m:.1f} m"
+
+
+def _elevation_for_plot(elevation_m: float | None, fallback: float | None) -> float | str:
+    if elevation_m is not None:
+        return elevation_m
+    return fallback if fallback is not None else "#00d4ff"
+
+
+def _sample_elevation_range(samples: list[FiberSample]) -> tuple[float | None, float | None]:
+    elevations = [sample.elevation_m for sample in samples if sample.elevation_m is not None]
+    if not elevations:
+        return None, None
+    return min(elevations), max(elevations)
+
+
+def _elevation_color_hex(elevation_m: float | None, elevation_min: float | None, elevation_max: float | None) -> str:
+    if elevation_m is None or elevation_min is None or elevation_max is None:
+        return "#00d4ff"
+    if math.isclose(elevation_min, elevation_max):
+        value = 0.5
+    else:
+        value = (elevation_m - elevation_min) / (elevation_max - elevation_min)
+    return mcolors.to_hex(plt.get_cmap("jet")(max(0.0, min(1.0, value))))
 
 
 def _same_lonlat(first: tuple[float, float], second: tuple[float, float]) -> bool:

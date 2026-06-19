@@ -103,3 +103,17 @@ def test_fiber_map_html_shows_interpolated_sample_elevation(tmp_path: Path) -> N
 
     html = html_path.read_text(encoding="utf-8")
     assert "elevation=1001.5 m" in html
+
+
+def test_fiber_map_html_colors_samples_by_elevation(tmp_path: Path) -> None:
+    samples = [
+        FiberSample(0, 0.0, 42.0, 128.0, 1000.0, 0, 1),
+        FiberSample(1, 10.0, 42.0001, 128.0001, 1100.0, 0, 1),
+    ]
+
+    html_path = tmp_path / "fiber.html"
+    save_fiber_map_html([point(42.0, 128.0, 1000.0), point(42.0001, 128.0001, 1100.0)], samples, html_path, title="test")
+
+    html = html_path.read_text(encoding="utf-8")
+    assert "#000080" in html
+    assert "#800000" in html

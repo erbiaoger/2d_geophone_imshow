@@ -180,4 +180,6 @@ uv run --no-sync python scripts/interpolate_fiber_route.py \
 - `fiber_10m_map.html`: 可交互 HTML 地图，显示 10 m 点，并每 100 m 标一个里程点。
 - `fiber_summary.txt`: 光纤总长度和点数摘要。
 
+PNG 和 HTML 中的测线点都按 `elevation_m` 使用 `jet` 色标上色。
+
 高程说明: 实测范围内按原始测点高程沿道路累计距离线性插值；超过最后一个实测点的延伸段保持最后一个实测高程。
