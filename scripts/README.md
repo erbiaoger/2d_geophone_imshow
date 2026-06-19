@@ -60,3 +60,21 @@ uv run --no-sync python scripts/plot_station_maps_from_csv.py \
   --station-csv outputs/stations.csv \
   --output-dir outputs/from_csv
 ```
+
+## interpolate_fiber_route.py
+
+作用:
+
+- 读取已有 DAS 坐标 CSV/TXT。
+- 按输入顺序连接原始点，计算测线累计长度。
+- 按固定间距输出整条光纤的插值经纬度点。
+- 输出坐标 CSV、平面 PNG、HTML 地图和长度摘要。
+
+运行:
+
+```bash
+uv run --no-sync python scripts/interpolate_fiber_route.py \
+  --station-csv "/path/to/stations_or_changbai.txt" \
+  --output-dir outputs/fiber_10m \
+  --spacing-m 10
+```

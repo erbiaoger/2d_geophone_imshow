@@ -159,3 +159,21 @@ uv run --no-sync python scripts/plot_geophone_coordinates.py \
 ```
 
 可选值包括 `Esri.WorldImagery`, `Esri.WorldTopoMap`, `Esri.WorldPhysical`, `OpenTopoMap`。
+
+## DAS 测线 10 m 插值
+
+如果已有坐标点沿光纤/道路顺序排列，可沿折线插值出约每 10 m 一个坐标点:
+
+```bash
+uv run --no-sync python scripts/interpolate_fiber_route.py \
+  --station-csv "/Volumes/SanDisk2T4/data/dasQt-other/ChangBai/txt_0611_084816.txt" \
+  --output-dir outputs/changbai_fiber_10m \
+  --spacing-m 10
+```
+
+输出:
+
+- `fiber_10m_coordinates.csv`: 每 10 m 点的经纬度、累计距离和所在原始线段。
+- `fiber_10m_plan.png`: 原始点、插值测线和 10 m 点平面图。
+- `fiber_10m_map.html`: 可交互 HTML 地图。
+- `fiber_summary.txt`: 光纤总长度和点数摘要。
