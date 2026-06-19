@@ -504,7 +504,10 @@ def _load_tile(provider: dict[str, str | int], tile_x: int, tile_y: int, zoom: i
 
     url = str(provider["url"]).format(z=zoom, x=tile_x, y=tile_y)
     try:
-        response = requests.get(url, timeout=12, headers={"User-Agent": "2d-geophone-imshow/0.1"})
+        session = requests.Session()
+        # ponytail: tile servers are public HTTPS; ignore broken SOCKS env vars instead of adding PySocks.
+        session.trust_env = False
+        response = session.get(url, timeout=12, headers={"User-Agent": "2d-geophone-imshow/0.1"})
         response.raise_for_status()
     except requests.RequestException:
         return None
@@ -532,7 +535,7 @@ def _xyz_provider(provider_name: str) -> dict[str, str | int]:
         "Esri.WorldImagery": {
             "key": "esri_world_imagery",
             "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-            "zoom": 17,
+            "zoom": 14,
             "attribution": "Tiles (C) Esri",
         },
         "Esri.WorldPhysical": {

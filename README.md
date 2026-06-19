@@ -79,7 +79,7 @@ uv run --no-sync python scripts/plot_station_maps_from_csv.py \
 
 ## 直接从台站索引 CSV 绘图
 
-如果你已经有台站索引 CSV，可直接运行:
+如果你已经有台站索引 CSV，或长白这种无表头 TXT 坐标表，可直接运行:
 
 ```bash
 uv run --no-sync python scripts/plot_geophone_coordinates.py \
@@ -94,6 +94,10 @@ uv run --no-sync python scripts/plot_geophone_coordinates.py \
 - 经纬度: `lat`, `latitude`, `lon`, `longitude`
 - 海拔: `elevation`, `elev`, `elevation_m`
 - 文件信息: `path`, `file_name`, `name`
+
+长白无表头 TXT 兼容列顺序为:
+
+- `name, utm_northing, utm_easting, elevation_m, latitude, longitude, elevation_m_copy`
 
 如果 CSV 里有 `lat/lon`，会直接生成地图底图和 HTML；如果只有 `x/y` 或 `row/column`，则先画平面分布图，也可以再配合 `--origin-lat/--origin-lon` 做投影。
 

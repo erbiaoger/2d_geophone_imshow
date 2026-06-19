@@ -179,6 +179,24 @@ def test_load_points_from_csv_accepts_xy_aliases(tmp_path: Path) -> None:
     assert points[0].file_name == "station202"
 
 
+def test_load_points_from_csv_accepts_headerless_changbai_txt(tmp_path: Path) -> None:
+    txt_path = tmp_path / "changbai.txt"
+    txt_path.write_text(
+        "start,4667485.0966,427909.4594,1281.4515,42.139366888,128.127972772,1281.4515,\n"
+        "pt0,4667439.5070,427873.8132,1283.7095,42.138953222,128.127547268,1283.7095,\n",
+        encoding="utf-8",
+    )
+
+    points = load_points_from_csv(txt_path)
+
+    assert len(points) == 2
+    assert points[0].file_name == "start"
+    assert points[0].longitude == pytest.approx(128.127972772)
+    assert points[0].latitude == pytest.approx(42.139366888)
+    assert points[0].elevation_m == pytest.approx(1281.4515)
+    assert points[0].coordinate_source == "csv_lonlat"
+
+
 def test_project_array_points_uses_origin_spacing_and_bearings(tmp_path: Path) -> None:
     write_sac(tmp_path / "1" / "S1_Z_1.sac")
     write_sac(tmp_path / "1" / "S1_Z_2.sac")

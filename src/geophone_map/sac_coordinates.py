@@ -301,10 +301,17 @@ def load_points_from_csv(csv_path: Path) -> list[GeophonePoint]:
     """Load station points from a CSV file with flexible column aliases."""
     csv_path = Path(csv_path)
     frame = pd.read_csv(csv_path)
+    normalized_columns = {_normalize_column_name(column): column for column in frame.columns}
+    if frame.empty or not _has_coordinate_like_columns(normalized_columns):
+        frame = _read_headerless_changbai_txt(csv_path)
+        if frame.empty:
+            return []
+
+    normalized_columns = {_normalize_column_name(column): column for column in frame.columns}
+    station_name_col = _find_csv_column(normalized_columns, "stationname", "name", "label")
     if frame.empty:
         return []
 
-    normalized_columns = {_normalize_column_name(column): column for column in frame.columns}
     row_col = _find_csv_column(normalized_columns, "row", "station", "stationid", "stationindex", "index", "id")
     column_col = _find_csv_column(normalized_columns, "column", "col")
     x_col = _find_csv_column(normalized_columns, "x")
@@ -353,6 +360,8 @@ def load_points_from_csv(csv_path: Path) -> list[GeophonePoint]:
         point_path = Path(raw_path) if raw_path else csv_path
         if file_name_col and pd.notna(row[file_name_col]):
             file_name = str(row[file_name_col]).strip()
+        elif station_name_col and pd.notna(row[station_name_col]):
+            file_name = str(row[station_name_col]).strip()
         elif raw_path:
             file_name = Path(raw_path).name
         elif row_value is not None:
@@ -376,6 +385,37 @@ def load_points_from_csv(csv_path: Path) -> list[GeophonePoint]:
         )
 
     return points
+
+
+def _has_coordinate_like_columns(normalized_columns: dict[str, str]) -> bool:
+    return any(
+        _find_csv_column(normalized_columns, *aliases)
+        for aliases in (
+            ("x",),
+            ("y",),
+            ("latitude", "lat", "stla"),
+            ("longitude", "lon", "lng", "stlo"),
+            ("row", "station", "stationid", "stationindex", "index", "id"),
+            ("column", "col"),
+        )
+    )
+
+
+def _read_headerless_changbai_txt(path: Path) -> pd.DataFrame:
+    frame = pd.read_csv(path, header=None)
+    if frame.shape[1] < 7:
+        return pd.DataFrame()
+    frame = frame.iloc[:, :7].copy()
+    frame.columns = [
+        "station_name",
+        "utm_northing",
+        "utm_easting",
+        "elevation_m",
+        "latitude",
+        "longitude",
+        "elevation_m_copy",
+    ]
+    return frame
 
 
 def parse_filename_station_id(path: Path) -> str | None:
